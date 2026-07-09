@@ -1,8 +1,26 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import dotenv from "dotenv";
+import path from "path";
 import * as schema from "./schema";
 
 const { Pool } = pg;
+
+// Load .env from workspace root if DATABASE_URL is not set
+if (!process.env.DATABASE_URL) {
+  dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+}
+
+if (process.env.DATABASE_URL) {
+  let cleanUrl = process.env.DATABASE_URL.trim();
+  if (cleanUrl.startsWith("DATABASE_URL=")) {
+    cleanUrl = cleanUrl.substring("DATABASE_URL=".length).trim();
+  }
+  if ((cleanUrl.startsWith('"') && cleanUrl.endsWith('"')) || (cleanUrl.startsWith("'") && cleanUrl.endsWith("'"))) {
+    cleanUrl = cleanUrl.substring(1, cleanUrl.length - 1).trim();
+  }
+  process.env.DATABASE_URL = cleanUrl;
+}
 
 let pool: any = null;
 let db: any = null;

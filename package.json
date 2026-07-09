@@ -18,6 +18,7 @@
     "typescript": "~5.9.3"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "drizzle-zod": "^0.8.3",
     "openai": "^6.45.0",
     "p-limit": "^7.3.0",

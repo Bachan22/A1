@@ -11,12 +11,18 @@ export const tasksTable = pgTable("tasks", {
   priority: text("priority").default("MEDIUM"),
   projectId: text("project_id").references(() => projectsTable.id, { onDelete: "set null" }),
   assigneeId: text("assignee_id").references(() => usersTable.id, { onDelete: "set null" }),
-  dueDate: text("due_date"),
+  dueDate: timestamp("due_date"),
   description: text("description"),
-  parentId: text("parent_id"),  // self-reference added via ALTER TABLE in bootstrap
-  createdAt: timestamp("created_at").defaultNow(),
+  parentId: text("parent_id").references((): any => tasksTable.id, { onDelete: "cascade" }),
+  
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertTaskSchema = createInsertSchema(tasksTable).omit({ id: true, createdAt: true });
+export const insertTaskSchema = createInsertSchema(tasksTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasksTable.$inferSelect;

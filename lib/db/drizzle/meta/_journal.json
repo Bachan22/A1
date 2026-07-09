@@ -8,6 +8,13 @@
       "when": 1782889574938,
       "tag": "0000_fearless_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783621455266,
+      "tag": "0001_fat_mongu",
+      "breakpoints": true
     }
   ]
 }

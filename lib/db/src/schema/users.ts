@@ -12,9 +12,15 @@ export const usersTable = pgTable("users", {
   department: text("department"),
   isActive: boolean("is_active").default(true),
   allowedModules: text("allowed_modules"),
-  createdAt: timestamp("created_at").defaultNow(),
+  
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
+export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;

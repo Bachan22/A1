@@ -11,7 +11,7 @@ export const invoicesTable = pgTable("invoices", {
   invoiceDate: text("invoice_date"),
   dueDate: text("due_date"),
 
-  // Business (your) details
+  // Business details
   logoUrl: text("logo_url"),
   businessName: text("business_name"),
   businessPhone: text("business_phone"),
@@ -51,7 +51,7 @@ export const invoicesTable = pgTable("invoices", {
   signatureUrl: text("signature_url"),
   bankDetails: json("bank_details").$type<{ accountNumber?: string; ifsc?: string; bankName?: string; accountName?: string }>(),
 
-  // Line items: description, hsnSac, qty, unitPrice, taxPercent (gst%)
+  // Legacy line items JSON for compatibility
   lineItems: json("line_items").$type<Array<{
     description: string;
     hsnSac?: string;
@@ -60,9 +60,35 @@ export const invoicesTable = pgTable("invoices", {
     taxPercent: number;
   }>>(),
 
-  createdAt: timestamp("created_at").defaultNow(),
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true });
+export const invoiceItemsTable = pgTable("invoice_items", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  invoiceId: text("invoice_id").notNull().references(() => invoicesTable.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  hsnSac: text("hsn_sac"),
+  qty: real("qty").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  taxPercent: real("tax_percent").default(18),
+  
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertInvoiceItemSchema = createInsertSchema(invoiceItemsTable).omit({ id: true, createdAt: true, updatedAt: true });
+
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoicesTable.$inferSelect;
+export type InsertInvoiceItem = z.infer<typeof insertInvoiceItemSchema>;
+export type InvoiceItem = typeof invoiceItemsTable.$inferSelect;

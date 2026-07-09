@@ -25,9 +25,15 @@ export const clientsTable = pgTable("clients", {
   cmsPreference: text("cms_preference"),
   budgetRange: text("budget_range"),
   logoUrl: text("logo_url"),
-  createdAt: timestamp("created_at").defaultNow(),
+  
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertClientSchema = createInsertSchema(clientsTable).omit({ id: true, createdAt: true });
+export const insertClientSchema = createInsertSchema(clientsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clientsTable.$inferSelect;

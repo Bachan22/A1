@@ -33,14 +33,6 @@ export const quotationsTable = pgTable("quotations", {
   clientPan: text("client_pan"),
   billingAddress: text("billing_address"),
   shippingAddress: text("shipping_address"),
-  lineItems: json("line_items").$type<Array<{
-    itemName?: string;
-    description?: string;
-    hsnSac?: string;
-    qty: number;
-    unitPrice: number;
-    taxPercent: number;
-  }>>(),
   subtotal: real("subtotal").default(0),
   taxAmount: real("tax_amount").default(0),
   discount: real("discount").default(0),
@@ -50,9 +42,47 @@ export const quotationsTable = pgTable("quotations", {
   termsAndConditions: text("terms_and_conditions"),
   signatureText: text("signature_text"),
   bankDetails: json("bank_details").$type<{ accountNumber?: string; ifsc?: string; bankName?: string; accountName?: string }>(),
-  createdAt: timestamp("created_at").defaultNow(),
+  
+  // Legacy line items JSON for compatibility
+  lineItems: json("line_items").$type<Array<{
+    itemName?: string;
+    description?: string;
+    hsnSac?: string;
+    qty: number;
+    unitPrice: number;
+    taxPercent: number;
+  }>>(),
+
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertQuotationSchema = createInsertSchema(quotationsTable).omit({ id: true, createdAt: true });
+export const quotationItemsTable = pgTable("quotation_items", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  quotationId: text("quotation_id").notNull().references(() => quotationsTable.id, { onDelete: "cascade" }),
+  itemName: text("item_name"),
+  description: text("description"),
+  hsnSac: text("hsn_sac"),
+  qty: real("qty").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  taxPercent: real("tax_percent").default(18),
+  
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const insertQuotationSchema = createInsertSchema(quotationsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertQuotationItemSchema = createInsertSchema(quotationItemsTable).omit({ id: true, createdAt: true, updatedAt: true });
+
 export type InsertQuotation = z.infer<typeof insertQuotationSchema>;
 export type Quotation = typeof quotationsTable.$inferSelect;
+export type InsertQuotationItem = z.infer<typeof insertQuotationItemSchema>;
+export type QuotationItem = typeof quotationItemsTable.$inferSelect;

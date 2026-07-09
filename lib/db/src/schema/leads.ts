@@ -11,13 +11,19 @@ export const leadsTable = pgTable("leads", {
   email: text("email"),
   value: real("value"),
   probability: integer("probability").default(0),
-  expectedCloseDate: text("expected_close_date"),
+  expectedCloseDate: timestamp("expected_close_date"),
   source: text("source"),
   notes: text("notes"),
   stageChangedAt: timestamp("stage_changed_at").defaultNow(),
-  createdAt: timestamp("created_at").defaultNow(),
+  
+  // Audit fields
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertLeadSchema = createInsertSchema(leadsTable).omit({ id: true, createdAt: true, stageChangedAt: true });
+export const insertLeadSchema = createInsertSchema(leadsTable).omit({ id: true, createdAt: true, updatedAt: true, stageChangedAt: true });
 export type InsertLead = z.infer<typeof insertLeadSchema>;
 export type Lead = typeof leadsTable.$inferSelect;
