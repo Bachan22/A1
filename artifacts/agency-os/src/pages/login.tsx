@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Briefcase, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface LoginForm {
   email: string;
@@ -19,6 +19,14 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [, navigate] = useLocation();
   const [showPass, setShowPass] = useState(false);
+
+  useEffect(() => {
+    const expiredMsg = localStorage.getItem("session_expired_message");
+    if (expiredMsg) {
+      toast.error(expiredMsg);
+      localStorage.removeItem("session_expired_message");
+    }
+  }, []);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     defaultValues: { email: "", password: "" },

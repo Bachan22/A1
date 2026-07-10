@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useAuth } from "@/App";
 import { useGetClient, useGetClientContracts, useListProjects, useListInvoices, useUpdateClient, getGetClientQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -72,6 +73,7 @@ interface ActivityLog {
 
 export default function ClientDetailPage({ id }: { id: string }) {
   const qc = useQueryClient();
+  const { token } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
@@ -88,7 +90,7 @@ export default function ClientDetailPage({ id }: { id: string }) {
     queryKey: ["client-activity", id],
     queryFn: async () => {
       const res = await fetch(`/api/clients/${id}/activity`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch activity");
       return res.json();
@@ -109,7 +111,7 @@ export default function ClientDetailPage({ id }: { id: string }) {
     mutationFn: async () => {
       const res = await fetch(`/api/clients/${id}/recalculate-health`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed");
       return res.json() as Promise<{ health: string }>;
@@ -128,7 +130,7 @@ export default function ClientDetailPage({ id }: { id: string }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ type: activityType, title: activityTitle, description: activityDesc }),
       });
@@ -157,7 +159,7 @@ export default function ClientDetailPage({ id }: { id: string }) {
       formData.append("file", file);
       const res = await fetch("/api/uploads", {
         method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       if (!res.ok) throw new Error("Upload failed");

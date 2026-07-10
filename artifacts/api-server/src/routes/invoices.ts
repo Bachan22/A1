@@ -1,11 +1,29 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { invoicesTable, clientsTable } from "@workspace/db/schema";
+import { invoicesTable, invoiceItemsTable, clientsTable } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 
 const router = Router();
+
+const invoiceSyncConfig = {
+  parentTable: invoicesTable,
+  childTable: invoiceItemsTable,
+  foreignKeyField: "invoiceId",
+  payloadKeys: ["lineItems", "items"],
+  mapItem: (item: any, parentId: string) => ({
+    invoiceId: parentId,
+    description: item.description || "",
+    hsnSac: item.hsnSac || null,
+    qty: item.qty !== undefined ? Number(item.qty) : 1,
+    unitPrice: item.unitPrice !== undefined ? Number(item.unitPrice) : 0,
+    taxPercent: item.taxPercent !== undefined ? Number(item.taxPercent) : 18,
+    createdBy: item.createdBy || null,
+    updatedBy: item.updatedBy || null,
+  }),
+};
 
 router.get("/financial-summary", asyncHandler(async (req, res) => {
   const [
@@ -82,18 +100,14 @@ router.post("/", asyncHandler(async (req, res) => {
       .filter((n) => !isNaN(n));
     body.number = `INV-${nums.length > 0 ? Math.max(...nums) + 1 : 1001}`;
   }
-  const [row] = await db.insert(invoicesTable).values(body).returning();
+  const row = await syncParentInsert(invoiceSyncConfig, body, req.body);
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (body.clientId === "") body.clientId = null;
-  const [row] = await db
-    .update(invoicesTable)
-    .set(body)
-    .where(eq(invoicesTable.id, (req.params.id as string)))
-    .returning();
+  const row = await syncParentUpdate(invoiceSyncConfig, req.params.id as string, body, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));

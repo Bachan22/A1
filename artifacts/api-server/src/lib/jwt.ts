@@ -1,15 +1,16 @@
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 
-const _devSecret = randomBytes(48).toString("hex");
-
 function getSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV !== "production") {
-    return _devSecret;
+  if (process.env.JWT_SECRET) {
+    return process.env.JWT_SECRET;
   }
+
+  if (process.env.NODE_ENV !== "production") {
+    return "agency_os_default_dev_secret_key_1234567890_abc";
+  }
+
   throw new Error(
-    "JWT_SECRET environment variable is required in production. Set it in Replit Secrets."
+    "JWT_SECRET environment variable is required in production."
   );
 }
 

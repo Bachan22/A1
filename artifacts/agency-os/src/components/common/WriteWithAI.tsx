@@ -65,7 +65,7 @@ const CONTEXT_CONFIG: Record<WriteWithAIContext, { label: string; placeholder: s
 };
 
 function getToken() {
-  return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  return typeof window !== "undefined" ? localStorage.getItem("agency_token") : null;
 }
 
 interface WriteWithAIProps {

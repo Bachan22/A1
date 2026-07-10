@@ -1,11 +1,29 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { purchaseOrdersTable, clientsTable } from "@workspace/db/schema";
+import { purchaseOrdersTable, purchaseOrderItemsTable, clientsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 
 const router = Router();
+
+const poSyncConfig = {
+  parentTable: purchaseOrdersTable,
+  childTable: purchaseOrderItemsTable,
+  foreignKeyField: "purchaseOrderId",
+  payloadKeys: ["lineItems", "items"],
+  mapItem: (item: any, parentId: string) => ({
+    purchaseOrderId: parentId,
+    description: item.description || "",
+    hsnSac: item.hsnSac || null,
+    qty: item.qty !== undefined ? Number(item.qty) : 1,
+    unitPrice: item.unitPrice !== undefined ? Number(item.unitPrice) : 0,
+    taxPercent: item.taxPercent !== undefined ? Number(item.taxPercent) : 18,
+    createdBy: item.createdBy || null,
+    updatedBy: item.updatedBy || null,
+  }),
+};
 
 const PO_COLS = {
   id: purchaseOrdersTable.id,
@@ -45,7 +63,7 @@ router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (!body.clientId) body.clientId = null;
   if (!body.number) body.number = await nextNumber();
-  const [row] = await db.insert(purchaseOrdersTable).values(body).returning();
+  const row = await syncParentInsert(poSyncConfig, body, req.body);
   return res.status(201).json(row);
 }));
 
@@ -62,11 +80,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (body.clientId === "") body.clientId = null;
-  const [row] = await db
-    .update(purchaseOrdersTable)
-    .set(body)
-    .where(eq(purchaseOrdersTable.id, (req.params.id as string)))
-    .returning();
+  const row = await syncParentUpdate(poSyncConfig, req.params.id as string, body, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));

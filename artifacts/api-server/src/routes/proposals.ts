@@ -1,11 +1,32 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { proposalsTable, clientsTable } from "@workspace/db/schema";
+import { proposalsTable, proposalItemsTable, clientsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 
 const router = Router();
+
+const proposalSyncConfig = {
+  parentTable: proposalsTable,
+  childTable: proposalItemsTable,
+  foreignKeyField: "proposalId",
+  payloadKeys: ["lineItems", "items"],
+  mapItem: (item: any, parentId: string) => {
+    const qty = item.qty !== undefined ? Number(item.qty) : 1;
+    const unitPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : 0;
+    return {
+      proposalId: parentId,
+      description: item.description || "",
+      qty,
+      unitPrice,
+      totalPrice: item.totalPrice !== undefined ? Number(item.totalPrice) : qty * unitPrice,
+      createdBy: item.createdBy || null,
+      updatedBy: item.updatedBy || null,
+    };
+  },
+};
 
 router.get("/", asyncHandler(async (req, res) => {
   const rows = await db
@@ -32,18 +53,14 @@ router.get("/", asyncHandler(async (req, res) => {
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (!body.clientId) body.clientId = null;
-  const [row] = await db.insert(proposalsTable).values(body).returning();
+  const row = await syncParentInsert(proposalSyncConfig, body, req.body);
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (body.clientId === "") body.clientId = null;
-  const [row] = await db
-    .update(proposalsTable)
-    .set(body)
-    .where(eq(proposalsTable.id, (req.params.id as string)))
-    .returning();
+  const row = await syncParentUpdate(proposalSyncConfig, req.params.id as string, body, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));

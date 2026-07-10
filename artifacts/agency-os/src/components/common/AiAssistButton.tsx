@@ -31,7 +31,7 @@ interface AiAssistButtonProps {
 }
 
 function getToken() {
-  return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  return typeof window !== "undefined" ? localStorage.getItem("agency_token") : null;
 }
 
 export function AiAssistButton({

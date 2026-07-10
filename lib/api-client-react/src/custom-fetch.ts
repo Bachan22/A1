@@ -360,6 +360,17 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    if (response.status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("agency_token");
+        localStorage.removeItem("token");
+        localStorage.removeItem("agency_user");
+        localStorage.setItem("session_expired_message", "Your session has expired. Please sign in again.");
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login";
+        }
+      }
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 

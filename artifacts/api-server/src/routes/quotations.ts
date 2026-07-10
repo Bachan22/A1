@@ -1,11 +1,47 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { quotationsTable, invoicesTable, clientsTable } from "@workspace/db/schema";
+import { quotationsTable, quotationItemsTable, invoicesTable, invoiceItemsTable, clientsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 
 const router = Router();
+
+const quotationSyncConfig = {
+  parentTable: quotationsTable,
+  childTable: quotationItemsTable,
+  foreignKeyField: "quotationId",
+  payloadKeys: ["lineItems", "items"],
+  mapItem: (item: any, parentId: string) => ({
+    quotationId: parentId,
+    itemName: item.itemName || null,
+    description: item.description || "",
+    hsnSac: item.hsnSac || null,
+    qty: item.qty !== undefined ? Number(item.qty) : 1,
+    unitPrice: item.unitPrice !== undefined ? Number(item.unitPrice) : 0,
+    taxPercent: item.taxPercent !== undefined ? Number(item.taxPercent) : 18,
+    createdBy: item.createdBy || null,
+    updatedBy: item.updatedBy || null,
+  }),
+};
+
+const invoiceSyncConfig = {
+  parentTable: invoicesTable,
+  childTable: invoiceItemsTable,
+  foreignKeyField: "invoiceId",
+  payloadKeys: ["lineItems", "items"],
+  mapItem: (item: any, parentId: string) => ({
+    invoiceId: parentId,
+    description: item.description || "",
+    hsnSac: item.hsnSac || null,
+    qty: item.qty !== undefined ? Number(item.qty) : 1,
+    unitPrice: item.unitPrice !== undefined ? Number(item.unitPrice) : 0,
+    taxPercent: item.taxPercent !== undefined ? Number(item.taxPercent) : 18,
+    createdBy: item.createdBy || null,
+    updatedBy: item.updatedBy || null,
+  }),
+};
 
 async function generateQuotationNumber(): Promise<string> {
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(quotationsTable);
@@ -74,18 +110,14 @@ router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (!body.clientId) body.clientId = null;
   if (!body.number) body.number = await generateQuotationNumber();
-  const [row] = await db.insert(quotationsTable).values(body).returning();
+  const row = await syncParentInsert(quotationSyncConfig, body, req.body);
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   if (body.clientId === "") body.clientId = null;
-  const [row] = await db
-    .update(quotationsTable)
-    .set(body)
-    .where(eq(quotationsTable.id, (req.params.id as string)))
-    .returning();
+  const row = await syncParentUpdate(quotationSyncConfig, req.params.id as string, body, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
@@ -107,25 +139,24 @@ router.post("/:id/convert-to-invoice", asyncHandler(async (req, res) => {
     .filter((n) => !isNaN(n));
   const nextNum = `INV-${nums.length > 0 ? Math.max(...nums) + 1 : 1001}`;
 
-  const [invoice] = await db
-    .insert(invoicesTable)
-    .values({
-      number: nextNum,
-      clientId: quot.clientId,
-      status: "DRAFT",
-      subtotal: quot.subtotal,
-      taxAmount: quot.taxAmount,
-      total: quot.total,
-      notes: quot.notes,
-      companyGstin: quot.companyGstin,
-      clientGstin: quot.clientGstin,
-      billingAddress: quot.billingAddress,
-      shippingAddress: quot.shippingAddress,
-      termsAndConditions: quot.termsAndConditions,
-      bankDetails: quot.bankDetails as unknown as typeof invoicesTable.$inferInsert["bankDetails"],
-      lineItems: quot.lineItems as unknown as typeof invoicesTable.$inferInsert["lineItems"],
-    })
-    .returning();
+  const body = {
+    number: nextNum,
+    clientId: quot.clientId,
+    status: "DRAFT",
+    subtotal: quot.subtotal,
+    taxAmount: quot.taxAmount,
+    total: quot.total,
+    notes: quot.notes,
+    companyGstin: quot.companyGstin,
+    clientGstin: quot.clientGstin,
+    billingAddress: quot.billingAddress,
+    shippingAddress: quot.shippingAddress,
+    termsAndConditions: quot.termsAndConditions,
+    bankDetails: quot.bankDetails as any,
+    lineItems: quot.lineItems as any,
+  };
+
+  const invoice = await syncParentInsert(invoiceSyncConfig, body, body);
 
   await db.update(quotationsTable).set({ status: "APPROVED" }).where(eq(quotationsTable.id, (req.params.id as string)));
 

@@ -23,32 +23,42 @@ export const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+// Module-level variable to synchronously track active authentication token across transitions
+let activeToken: string | null = typeof window !== "undefined" ? (localStorage.getItem("agency_token") || localStorage.getItem("token")) : null;
+
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("agency_token");
+    const savedToken = localStorage.getItem("agency_token") || localStorage.getItem("token");
     const savedUser = localStorage.getItem("agency_user");
     if (savedToken && savedUser) {
       try {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
+        activeToken = savedToken;
+        localStorage.setItem("agency_token", savedToken);
+        localStorage.setItem("token", savedToken);
       } catch {}
     }
     setLoading(false);
   }, []);
 
   const login = (newToken: string, newUser: User) => {
+    activeToken = newToken;
     localStorage.setItem("agency_token", newToken);
+    localStorage.setItem("token", newToken);
     localStorage.setItem("agency_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
   };
 
   const logout = () => {
+    activeToken = null;
     localStorage.removeItem("agency_token");
+    localStorage.removeItem("token");
     localStorage.removeItem("agency_user");
     setToken(null);
     setUser(null);
@@ -85,6 +95,11 @@ import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 setBaseUrl(BASE || "/");
+
+// Register a single static auth token getter that accesses the dynamic activeToken state and localStorage fallback
+setAuthTokenGetter(() => {
+  return activeToken || (typeof window !== "undefined" ? (localStorage.getItem("agency_token") || localStorage.getItem("token")) : null) || "";
+});
 
 // ─── Query Client ───────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -143,7 +158,9 @@ function AppRouter() {
   const { token } = useAuth();
 
   useEffect(() => {
-    setAuthTokenGetter(() => token ?? "");
+    if (token !== undefined) {
+      activeToken = token;
+    }
   }, [token]);
 
   return (

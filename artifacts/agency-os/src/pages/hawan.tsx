@@ -84,7 +84,7 @@ export default function HawanHubPage() {
 
   const { data: clients } = useListClients();
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const token = typeof window !== "undefined" ? localStorage.getItem("agency_token") : null;
 
   function authHeaders() {
     return { Authorization: `Bearer ${token}` };

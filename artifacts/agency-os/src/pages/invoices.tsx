@@ -73,7 +73,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 };
 
 function getToken() {
-  return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  return typeof window !== "undefined" ? localStorage.getItem("agency_token") : null;
 }
 function authHeaders(json = false) {
   const h: Record<string, string> = { Authorization: `Bearer ${getToken()}` };
