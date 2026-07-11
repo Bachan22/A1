@@ -11,7 +11,6 @@ const router = Router();
 router.get("/stats", asyncHandler(async (req, res) => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const today = now.toISOString().slice(0, 10);
 
   const [
     [{ totalClients }],
@@ -28,7 +27,7 @@ router.get("/stats", asyncHandler(async (req, res) => {
     db.select({ revenuePaid: sql<number>`coalesce(sum(total),0)::float` }).from(invoicesTable).where(eq(invoicesTable.status, "PAID")),
     db.select({ outstanding: sql<number>`coalesce(sum(total),0)::float` }).from(invoicesTable).where(sql`${invoicesTable.status} in ('SENT','DRAFT','OVERDUE')`),
     db.select({ monthlyRevenue: sql<number>`coalesce(sum(total),0)::float` }).from(invoicesTable).where(and(eq(invoicesTable.status, "PAID"), gte(invoicesTable.invoiceDate, monthStart))),
-    db.select({ tasksDue: sql<number>`count(*)::int` }).from(tasksTable).where(and(sql`${tasksTable.status} != 'DONE'`, lte(tasksTable.dueDate, today))),
+    db.select({ tasksDue: sql<number>`count(*)::int` }).from(tasksTable).where(and(sql`${tasksTable.status} != 'DONE'`, lte(tasksTable.dueDate, now))),
   ]);
 
   return res.json({ totalClients, activeProjects, openLeads, revenuePaid, outstanding, monthlyRevenue, tasksDue });

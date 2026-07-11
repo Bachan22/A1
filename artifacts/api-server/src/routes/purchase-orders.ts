@@ -5,8 +5,21 @@ import { eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
+import { sanitizeAndValidate, validateLineItems, isValidUUID } from "../lib/validation";
 
 const router = Router();
+
+function sanitizePurchaseOrder(body: any, isUpdate = false) {
+  validateLineItems(body, "PurchaseOrders");
+  return sanitizeAndValidate(body, {
+    uuids: ["clientId", "vendorId"],
+    textDates: ["orderDate", "deliveryDate"],
+    numbers: ["subtotal", "taxAmount", "total"],
+    enums: {
+      status: ["DRAFT", "SENT", "DELIVERED", "CANCELLED"],
+    }
+  });
+}
 
 const poSyncConfig = {
   parentTable: purchaseOrdersTable,
@@ -61,13 +74,16 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (!body.clientId) body.clientId = null;
-  if (!body.number) body.number = await nextNumber();
-  const row = await syncParentInsert(poSyncConfig, body, req.body);
+  const sanitized = sanitizePurchaseOrder(body, false);
+  if (!sanitized.number) sanitized.number = await nextNumber();
+  const row = await syncParentInsert(poSyncConfig, sanitized, req.body);
   return res.status(201).json(row);
 }));
 
 router.get("/:id", asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid purchase order ID format", 400);
+  }
   const [row] = await db
     .select(PO_COLS)
     .from(purchaseOrdersTable)
@@ -78,14 +94,20 @@ router.get("/:id", asyncHandler(async (req, res) => {
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
-  const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (body.clientId === "") body.clientId = null;
-  const row = await syncParentUpdate(poSyncConfig, req.params.id as string, body, req.body);
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid purchase order ID format", 400);
+  }
+  const { id: _id, createdAt: _ts, ...body } = req.body || {};
+  const sanitized = sanitizePurchaseOrder(body, true);
+  const row = await syncParentUpdate(poSyncConfig, req.params.id as string, sanitized, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
 router.delete("/:id", asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid purchase order ID format", 400);
+  }
   await db.delete(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));

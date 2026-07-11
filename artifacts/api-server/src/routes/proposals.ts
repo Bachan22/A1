@@ -5,8 +5,21 @@ import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
+import { sanitizeAndValidate, validateLineItems, isValidUUID } from "../lib/validation";
 
 const router = Router();
+
+function sanitizeProposal(body: any, isUpdate = false) {
+  validateLineItems(body, "Proposals");
+  return sanitizeAndValidate(body, {
+    uuids: ["clientId"],
+    textDates: ["validUntil"],
+    numbers: ["value"],
+    enums: {
+      status: ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "REVOKED"],
+    }
+  });
+}
 
 const proposalSyncConfig = {
   parentTable: proposalsTable,
@@ -52,20 +65,26 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (!body.clientId) body.clientId = null;
-  const row = await syncParentInsert(proposalSyncConfig, body, req.body);
+  const sanitized = sanitizeProposal(body, false);
+  const row = await syncParentInsert(proposalSyncConfig, sanitized, req.body);
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid proposal ID format", 400);
+  }
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (body.clientId === "") body.clientId = null;
-  const row = await syncParentUpdate(proposalSyncConfig, req.params.id as string, body, req.body);
+  const sanitized = sanitizeProposal(body, true);
+  const row = await syncParentUpdate(proposalSyncConfig, req.params.id as string, sanitized, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
 router.delete("/:id", asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid proposal ID format", 400);
+  }
   await db.delete(proposalsTable).where(eq(proposalsTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));

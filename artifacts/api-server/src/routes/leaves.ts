@@ -5,6 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
 
 const router = Router();
 
@@ -38,13 +39,20 @@ router.post("/leaves", requireAuth, asyncHandler(async (req, res) => {
   const { type, startDate, endDate, reason } = req.body;
   if (!type || !startDate || !endDate) throw createError("type, startDate, and endDate are required", 400);
 
+  const sanitized = sanitizeAndValidate({ type, startDate, endDate, reason }, {
+    textDates: ["startDate", "endDate"],
+    enums: {
+      type: ["CASUAL", "SICK", "EARNED", "UNPAID"],
+    }
+  });
+
   const [leave] = await db.insert(leaveRequests).values({
     id: crypto.randomUUID(),
     userId,
-    type,
-    startDate,
-    endDate,
-    reason: reason ?? null,
+    type: sanitized.type,
+    startDate: sanitized.startDate,
+    endDate: sanitized.endDate,
+    reason: sanitized.reason ?? null,
     status: "PENDING",
   }).returning();
 
@@ -52,6 +60,9 @@ router.post("/leaves", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.post("/leaves/:id/approve", requireAuth, asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid leave request ID format", 400);
+  }
   const userId = (req as any).userId;
   const [updated] = await db.update(leaveRequests)
     .set({ status: "APPROVED", reviewedBy: userId })
@@ -62,6 +73,9 @@ router.post("/leaves/:id/approve", requireAuth, asyncHandler(async (req, res) =>
 }));
 
 router.post("/leaves/:id/reject", requireAuth, asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid leave request ID format", 400);
+  }
   const userId = (req as any).userId;
   const [updated] = await db.update(leaveRequests)
     .set({ status: "REJECTED", reviewedBy: userId })
@@ -74,9 +88,19 @@ router.post("/leaves/:id/reject", requireAuth, asyncHandler(async (req, res) => 
 // GET /api/leaves/balance?userId=&year=
 router.get("/leaves/balance", requireAuth, asyncHandler(async (req, res) => {
   const { userId, year } = req.query as Record<string, string>;
+  
+  if (year) {
+    const parsedYear = parseInt(year, 10);
+    if (isNaN(parsedYear) || !Number.isFinite(parsedYear)) {
+      throw createError("Invalid year format", 400);
+    }
+  }
   const targetYear = year ? parseInt(year, 10) : new Date().getFullYear();
   const targetUserId = userId || (req as any).userId;
   if (!targetUserId) throw createError("userId is required", 400);
+  if (!isValidUUID(targetUserId)) {
+    throw createError("Invalid userId format", 400);
+  }
 
   const result = await db.execute(
     `SELECT * FROM leave_balances WHERE user_id = $1 AND year = $2`,

@@ -132,7 +132,7 @@ export default function ClientPortalPage({ clientId }: { clientId: string }) {
               </div>
             ) : (
               (posts ?? []).map((post) => {
-                const sc = CONTENT_STATUS[post.status ?? "IDEA"];
+                const sc = CONTENT_STATUS[post.status ?? "IDEA"] ?? CONTENT_STATUS.IDEA;
                 return (
                   <Card key={post.id} className="overflow-hidden hover:shadow-md transition-shadow">
                     <div className="flex border-l-4 border-primary">
@@ -177,7 +177,7 @@ export default function ClientPortalPage({ clientId }: { clientId: string }) {
               </div>
             ) : (
               projects.map((project) => {
-                const ps = PROJ_STATUS[project.status ?? "NOT_STARTED"];
+                const ps = PROJ_STATUS[project.status ?? "NOT_STARTED"] ?? PROJ_STATUS.NOT_STARTED;
                 return (
                   <Card key={project.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-5">
@@ -216,7 +216,7 @@ export default function ClientPortalPage({ clientId }: { clientId: string }) {
               </div>
             ) : (
               invoices.map((inv) => {
-                const is = INV_STATUS[inv.status ?? "DRAFT"];
+                const is = INV_STATUS[inv.status ?? "DRAFT"] ?? INV_STATUS.DRAFT;
                 return (
                   <Card key={inv.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-5">
@@ -257,7 +257,7 @@ export default function ClientPortalPage({ clientId }: { clientId: string }) {
               </div>
             ) : (
               proposals.map((prop: any) => {
-                const ps = PROP_STATUS[prop.status ?? "DRAFT"];
+                const ps = PROP_STATUS[prop.status ?? "DRAFT"] ?? PROP_STATUS.DRAFT;
                 return (
                   <Card key={prop.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-5">

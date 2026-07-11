@@ -1,12 +1,43 @@
-"use client"
-
 import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+const Select = function Select({ children, ...props }: SelectPrimitive.Root.Props) {
+  const items = React.useMemo(() => {
+    const collected: Array<{ value: any; label: React.ReactNode }> = []
+
+    function traverse(child: React.ReactNode) {
+      if (!child) return
+
+      if (React.isValidElement(child)) {
+        const props = child.props as any
+        if (props && props.value !== undefined && 'children' in props) {
+          collected.push({
+            value: props.value,
+            label: props.children,
+          })
+        }
+
+        if (props && props.children) {
+          React.Children.forEach(props.children, traverse)
+        }
+      } else if (Array.isArray(child)) {
+        child.forEach(traverse)
+      }
+    }
+
+    React.Children.forEach(children, traverse)
+    return collected
+  }, [children])
+
+  return (
+    <SelectPrimitive.Root items={items} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

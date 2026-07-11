@@ -5,8 +5,17 @@ import { eq } from "drizzle-orm";
 import { hash } from "bcryptjs";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate } from "../lib/validation";
 
 const router = Router();
+
+function sanitizeUser(body: any, isUpdate = false) {
+  return sanitizeAndValidate(body, {
+    enums: {
+      systemRole: ["SUPER_ADMIN", "ACCOUNT_MANAGER", "CREATIVE_STRATEGIST", "DESIGNER", "DEVELOPER", "CONTENT_CREATOR", "CLIENT"],
+    }
+  });
+}
 
 const USER_SAFE_COLS = {
   id: usersTable.id,
@@ -45,6 +54,8 @@ router.post("/", requireAdmin, asyncHandler(async (req, res) => {
   const { name, email, password, systemRole, department, isActive, allowedModules } = req.body;
   if (!name || !email) throw createError("Name and email are required", 400);
 
+  const sanitized = sanitizeUser({ systemRole, department, isActive }, false);
+
   const [existing] = await db
     .select({ id: usersTable.id })
     .from(usersTable)
@@ -59,10 +70,10 @@ router.post("/", requireAdmin, asyncHandler(async (req, res) => {
       name,
       email,
       password: passwordHash,
-      systemRole: systemRole || "ACCOUNT_MANAGER",
-      role: systemRole || "ACCOUNT_MANAGER",
-      department: department || null,
-      isActive: isActive !== undefined ? isActive : true,
+      systemRole: sanitized.systemRole || "ACCOUNT_MANAGER",
+      role: sanitized.systemRole || "ACCOUNT_MANAGER",
+      department: sanitized.department || null,
+      isActive: sanitized.isActive !== undefined ? sanitized.isActive : true,
       allowedModules: allowedModules ? JSON.stringify(allowedModules) : JSON.stringify([]),
     })
     .returning(USER_SAFE_COLS);
@@ -83,8 +94,9 @@ router.patch("/:id", requireAdmin, asyncHandler(async (req, res) => {
     }
   }
 
-  const updateData: Record<string, unknown> = { ...body };
-  if (body.systemRole) updateData.role = body.systemRole;
+  const sanitized = sanitizeUser(body, true);
+  const updateData: Record<string, unknown> = { ...sanitized };
+  if (sanitized.systemRole) updateData.role = sanitized.systemRole;
   if (body.allowedModules) updateData.allowedModules = JSON.stringify(body.allowedModules);
 
   const [row] = await db

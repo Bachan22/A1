@@ -5,8 +5,23 @@ import { eq, desc, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
+import { sanitizeAndValidate, validateLineItems, isValidUUID } from "../lib/validation";
 
 const router = Router();
+
+function sanitizeInvoice(body: any, isUpdate = false) {
+  validateLineItems(body, "Invoices");
+  return sanitizeAndValidate(body, {
+    uuids: ["clientId"],
+    textDates: ["invoiceDate", "dueDate"],
+    numbers: ["subtotal", "taxAmount", "discount", "total"],
+    enums: {
+      status: ["DRAFT", "SENT", "VIEWED", "PAID", "OVERDUE", "CANCELLED"],
+      discountType: ["FIXED", "PERCENT"],
+      gstType: ["CGST_SGST", "IGST", "UTGST", "NONE"],
+    }
+  });
+}
 
 const invoiceSyncConfig = {
   parentTable: invoicesTable,
@@ -90,29 +105,35 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (!body.clientId) body.clientId = null;
-  if (!body.number) {
+  const sanitized = sanitizeInvoice(body, false);
+  if (!sanitized.number) {
     const existing = await db.select({ number: invoicesTable.number }).from(invoicesTable);
     const nums = existing
       .map((r) => r.number)
       .filter((n): n is string => !!n && n.startsWith("INV-"))
       .map((n) => parseInt(n.replace("INV-", ""), 10))
       .filter((n) => !isNaN(n));
-    body.number = `INV-${nums.length > 0 ? Math.max(...nums) + 1 : 1001}`;
+    sanitized.number = `INV-${nums.length > 0 ? Math.max(...nums) + 1 : 1001}`;
   }
-  const row = await syncParentInsert(invoiceSyncConfig, body, req.body);
+  const row = await syncParentInsert(invoiceSyncConfig, sanitized, req.body);
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid invoice ID format", 400);
+  }
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (body.clientId === "") body.clientId = null;
-  const row = await syncParentUpdate(invoiceSyncConfig, req.params.id as string, body, req.body);
+  const sanitized = sanitizeInvoice(body, true);
+  const row = await syncParentUpdate(invoiceSyncConfig, req.params.id as string, sanitized, req.body);
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
 router.delete("/:id", asyncHandler(async (req, res) => {
+  if (!isValidUUID(req.params.id)) {
+    throw createError("Invalid invoice ID format", 400);
+  }
   await db.delete(invoicesTable).where(eq(invoicesTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));

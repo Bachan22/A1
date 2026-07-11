@@ -781,7 +781,7 @@ export default function QuotationsPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filtered.map((q) => {
-                const sc = STATUS_CONFIG[q.status ?? "DRAFT"];
+                const sc = STATUS_CONFIG[q.status ?? "DRAFT"] ?? STATUS_CONFIG.DRAFT;
                 const row = q as QuotationRow;
                 return (
                   <tr

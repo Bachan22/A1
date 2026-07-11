@@ -4,6 +4,19 @@ import { clientsTable, invoicesTable } from "@workspace/db/schema";
 import { eq, ilike, or, and } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate } from "../lib/validation";
+
+function sanitizeClient(body: any, isUpdate = false) {
+  if (!isUpdate && (!body.companyName || typeof body.companyName !== "string" || body.companyName.trim() === "")) {
+    throw createError("Company name is required", 400);
+  }
+  return sanitizeAndValidate(body, {
+    enums: {
+      category: ["RETAINER", "ONE_TIME", "PARTNER", "LEAD", "INACTIVE"],
+      health: ["GREEN", "YELLOW", "RED"],
+    }
+  });
+}
 
 function calcHealthScore(invoices: { status: string | null; dueDate: string | null }[]): string {
   const now = new Date();
@@ -56,7 +69,8 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  const [row] = await db.insert(clientsTable).values(body).returning();
+  const sanitized = sanitizeClient(body, false);
+  const [row] = await db.insert(clientsTable).values(sanitized).returning();
   return res.status(201).json(row);
 }));
 
@@ -68,9 +82,10 @@ router.get("/:id", asyncHandler(async (req, res) => {
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
+  const sanitized = sanitizeClient(body, true);
   const [row] = await db
     .update(clientsTable)
-    .set(body)
+    .set(sanitized)
     .where(eq(clientsTable.id, (req.params.id as string)))
     .returning();
   if (!row) throw createError("Not found", 404);

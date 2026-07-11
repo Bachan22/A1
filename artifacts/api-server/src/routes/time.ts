@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { asyncHandler } from "../lib/asyncHandler";
+import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 
@@ -10,11 +12,28 @@ router.post("/timer", asyncHandler(async (req, res) => {
     req.body as {
       description?: string;
       projectId?: string;
-      minutes?: number;
+      minutes?: number | string;
       billable?: boolean;
       startedAt?: string;
       endedAt?: string;
     };
+
+  const sanitized = sanitizeAndValidate(
+    { description, projectId, minutes, billable, startedAt, endedAt },
+    {
+      uuids: projectId ? ["projectId"] : [],
+      numbers: minutes !== undefined && minutes !== null && minutes !== "" ? ["minutes"] : [],
+      dates: startedAt ? ["startedAt"] : [],
+    }
+  );
+
+  // Validate endedAt separately as a date if provided
+  if (endedAt) {
+    const d = new Date(endedAt);
+    if (isNaN(d.getTime())) {
+      throw createError("Invalid date syntax for field: endedAt", 400);
+    }
+  }
 
   const userId = (req as any).user?.id ?? null;
 
@@ -23,13 +42,13 @@ router.post("/timer", asyncHandler(async (req, res) => {
     VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7)
     RETURNING *
   `, [
-    projectId ?? null,
+    sanitized.projectId ?? null,
     userId,
-    startedAt ? new Date(startedAt) : new Date(),
+    sanitized.startedAt ? new Date(sanitized.startedAt) : new Date(),
     endedAt ? new Date(endedAt) : new Date(),
-    minutes ?? null,
-    description ?? null,
-    billable ?? true,
+    sanitized.minutes ?? null,
+    sanitized.description ?? null,
+    sanitized.billable ?? true,
   ]);
 
   return res.status(201).json(row);

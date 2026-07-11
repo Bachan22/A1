@@ -191,7 +191,7 @@ export default function LeavesPage() {
                   </TableHeader>
                   <TableBody>
                     {(myLeaves ?? []).map((l) => {
-                      const statusInfo = LEAVE_STATUS_MAP[l.status ?? "PENDING"];
+                      const statusInfo = LEAVE_STATUS_MAP[l.status ?? "PENDING"] ?? { label: l.status, className: "bg-slate-100 text-slate-800" };
                       const days = calculateDays(l.startDate, l.endDate);
                       return (
                         <TableRow key={l.id}>

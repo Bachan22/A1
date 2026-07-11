@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
 
 const router = Router();
 
@@ -9,6 +10,10 @@ const router = Router();
 router.get("/", asyncHandler(async (req, res) => {
   const { entityType, entityId } = req.query as Record<string, string>;
   if (!entityType || !entityId) throw createError("entityType and entityId are required", 400);
+
+  if (!isValidUUID(entityId)) {
+    throw createError("Invalid entityId format", 400);
+  }
 
   const result = await db.execute(
     `SELECT * FROM file_attachments WHERE entity_type = $1 AND entity_id = $2 ORDER BY created_at DESC`,
@@ -29,13 +34,19 @@ router.post("/", asyncHandler(async (req, res) => {
     throw createError("entityType, entityId, filename, and url are required", 400);
   }
 
+  if (!isValidUUID(entityId)) {
+    throw createError("Invalid entityId format", 400);
+  }
+
+  const sanitized = sanitizeAndValidate({ entityType, entityId, filename, url });
+
   const uploadedBy = (req as any).user?.id ?? null;
 
   const result = await db.execute(
     `INSERT INTO file_attachments (id, entity_type, entity_id, filename, url, uploaded_by)
      VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5)
      RETURNING *`,
-    [entityType, entityId, filename, url, uploadedBy]
+    [sanitized.entityType, sanitized.entityId, sanitized.filename, sanitized.url, uploadedBy]
   );
   const row = (result.rows ?? result)[0];
   return res.status(201).json(row);
@@ -43,9 +54,13 @@ router.post("/", asyncHandler(async (req, res) => {
 
 // DELETE /api/attachments/:id
 router.delete("/:id", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!isValidUUID(id)) {
+    throw createError("Invalid attachment ID format", 400);
+  }
   await db.execute(
     `DELETE FROM file_attachments WHERE id = $1`,
-    [req.params.id]
+    [id]
   );
   return res.status(204).send();
 }));

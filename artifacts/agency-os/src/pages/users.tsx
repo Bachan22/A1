@@ -184,7 +184,7 @@ export default function UsersPage() {
                     )}
                   </div>
 
-                  <Badge variant="secondary" className={rc?.className + " text-[11px] mb-3"}>
+                  <Badge variant="secondary" className={cn("text-[11px] mb-3", rc?.className)}>
                     {rc?.label ?? u.systemRole}
                   </Badge>
 

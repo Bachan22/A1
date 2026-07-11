@@ -226,8 +226,8 @@ export default function ProjectsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((p) => {
-            const sc = STATUS_CONFIG[p.status ?? "NOT_STARTED"];
-            const pc = PRIORITY_CONFIG[p.priority ?? "MEDIUM"];
+            const sc = STATUS_CONFIG[p.status ?? "NOT_STARTED"] ?? STATUS_CONFIG.NOT_STARTED;
+            const pc = PRIORITY_CONFIG[p.priority ?? "MEDIUM"] ?? PRIORITY_CONFIG.MEDIUM;
             const borderAccent = STATUS_BORDER[p.status ?? "NOT_STARTED"] ?? "border-l-slate-400";
             const isOverdue = p.dueDate && p.status !== "COMPLETED" && p.status !== "CANCELLED" &&
               new Date(p.dueDate) < new Date();

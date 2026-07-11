@@ -252,7 +252,7 @@ export default function ClientsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((c) => {
-            const healthInfo = HEALTH_MAP[c.health ?? "GREEN"];
+            const healthInfo = HEALTH_MAP[c.health ?? "GREEN"] ?? HEALTH_MAP.GREEN;
             const borderAccent = c.health === "GREEN" ? "border-l-emerald-500" : c.health === "YELLOW" ? "border-l-amber-400" : "border-l-rose-500";
             return (
               <Card key={c.id} className={cn("scale-hover border-l-[3px] group", borderAccent)}>

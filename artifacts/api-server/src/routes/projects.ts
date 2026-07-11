@@ -4,8 +4,23 @@ import { projectsTable, clientsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate } from "../lib/validation";
 
 const router = Router();
+
+function sanitizeProject(body: any) {
+  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
+    throw createError("Project name is required", 400);
+  }
+  return sanitizeAndValidate(body, {
+    uuids: ["clientId"],
+    dates: ["startDate", "dueDate"],
+    enums: {
+      status: ["NOT_STARTED", "IN_PROGRESS", "COMPLETED", "ON_HOLD"],
+      priority: ["LOW", "MEDIUM", "HIGH"],
+    },
+  });
+}
 
 router.get("/", asyncHandler(async (req, res) => {
   const rows = await db
@@ -27,7 +42,8 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  const [row] = await db.insert(projectsTable).values(body).returning();
+  const sanitized = sanitizeProject(body);
+  const [row] = await db.insert(projectsTable).values(sanitized).returning();
   return res.status(201).json(row);
 }));
 
@@ -53,9 +69,10 @@ router.get("/:id", asyncHandler(async (req, res) => {
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
+  const sanitized = sanitizeProject(body);
   const [row] = await db
     .update(projectsTable)
-    .set(body)
+    .set(sanitized)
     .where(eq(projectsTable.id, (req.params.id as string)))
     .returning();
   if (!row) throw createError("Not found", 404);

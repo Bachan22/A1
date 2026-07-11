@@ -192,7 +192,7 @@ export default function ClientDetailPage({ id }: { id: string }) {
     );
   }
 
-  const healthInfo = HEALTH_MAP[client.health ?? "GREEN"];
+  const healthInfo = HEALTH_MAP[client.health ?? "GREEN"] ?? HEALTH_MAP.GREEN;
   const initials = client.companyName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (

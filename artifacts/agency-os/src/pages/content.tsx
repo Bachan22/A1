@@ -441,7 +441,7 @@ export default function ContentPage() {
             </div>
           ) : (
             filteredPosts.map((post) => {
-              const sc = STATUS_CONFIG[post.status ?? "IDEA"];
+              const sc = STATUS_CONFIG[post.status ?? "IDEA"] ?? STATUS_CONFIG.IDEA;
               return (
                 <div
                   key={post.id}

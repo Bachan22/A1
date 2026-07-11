@@ -4,10 +4,24 @@ import { leadsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate } from "../lib/validation";
 
 const router = Router();
 
 const STAGES = ["LEAD", "CONTACTED", "DEMO_GIVEN", "PROPOSAL_SENT", "NEGOTIATION", "WON", "LOST"];
+
+function sanitizeLead(body: any, isUpdate = false) {
+  if (!isUpdate && (!body.title || typeof body.title !== "string" || body.title.trim() === "")) {
+    throw createError("Lead title is required", 400);
+  }
+  return sanitizeAndValidate(body, {
+    dates: ["expectedCloseDate", "stageChangedAt"],
+    numbers: ["value", "probability"],
+    enums: {
+      stage: STAGES,
+    }
+  });
+}
 
 router.get("/", asyncHandler(async (req, res) => {
   const rows = await db.select().from(leadsTable);
@@ -42,17 +56,19 @@ router.get("/pipeline-summary", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
+  const sanitized = sanitizeLead(body, false);
   const [row] = await db
     .insert(leadsTable)
-    .values({ ...body, stageChangedAt: new Date() })
+    .values({ ...sanitized, stageChangedAt: new Date() })
     .returning();
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  const updates: Record<string, unknown> = { ...body };
-  if (body.stage) updates.stageChangedAt = new Date();
+  const sanitized = sanitizeLead(body, true);
+  const updates: Record<string, unknown> = { ...sanitized };
+  if (sanitized.stage) updates.stageChangedAt = new Date();
   const [row] = await db
     .update(leadsTable)
     .set(updates)

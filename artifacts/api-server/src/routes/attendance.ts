@@ -5,15 +5,29 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { isValidUUID } from "../lib/validation";
 
 const router = Router();
 
 router.get("/attendance", requireAuth, asyncHandler(async (req, res) => {
   const { userId, month } = req.query as Record<string, string>;
   const conditions = [];
-  if (userId) conditions.push(eq(attendance.userId, userId));
+  if (userId) {
+    if (!isValidUUID(userId)) {
+      throw createError("Invalid userId format", 400);
+    }
+    conditions.push(eq(attendance.userId, userId));
+  }
   if (month) {
-    const [year, mo] = month.split("-").map(Number);
+    const parts = month.split("-");
+    if (parts.length !== 2) {
+      throw createError("month must be in YYYY-MM format", 400);
+    }
+    const year = Number(parts[0]);
+    const mo = Number(parts[1]);
+    if (isNaN(year) || isNaN(mo) || mo < 1 || mo > 12 || !Number.isFinite(year) || !Number.isFinite(mo)) {
+      throw createError("Invalid month values", 400);
+    }
     const start = new Date(year, mo - 1, 1).toISOString().slice(0, 10);
     const end = new Date(year, mo, 0).toISOString().slice(0, 10);
     conditions.push(sql`date >= ${start} AND date <= ${end}`);
@@ -31,7 +45,7 @@ router.get("/attendance", requireAuth, asyncHandler(async (req, res) => {
   return res.json(records.map((r) => ({
     ...r,
     userName: userMap[r.userId] ?? null,
-    checkInAt: r.checkInAt.toISOString(),
+    checkInAt: r.checkInAt?.toISOString() ?? null,
     checkOutAt: r.checkOutAt?.toISOString() ?? null,
   })));
 }));
@@ -62,7 +76,7 @@ router.post("/attendance/check-in", requireAuth, asyncHandler(async (req, res) =
   return res.json({
     ...record,
     userName: user.name,
-    checkInAt: record.checkInAt.toISOString(),
+    checkInAt: record.checkInAt?.toISOString() ?? null,
     checkOutAt: null,
   });
 }));
@@ -92,7 +106,7 @@ router.post("/attendance/check-out", requireAuth, asyncHandler(async (req, res) 
   return res.json({
     ...updated,
     userName: user.name,
-    checkInAt: updated.checkInAt.toISOString(),
+    checkInAt: updated.checkInAt?.toISOString() ?? null,
     checkOutAt: updated.checkOutAt?.toISOString() ?? null,
   });
 }));

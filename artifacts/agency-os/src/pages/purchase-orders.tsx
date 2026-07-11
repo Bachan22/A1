@@ -153,7 +153,7 @@ export default function PurchaseOrdersPage() {
 
   // ─── Detail View ────────────────────────────────────────────────────────────
   if (view === "detail" && selected) {
-    const sc = STATUS_CONFIG[selected.status ?? "DRAFT"];
+    const sc = STATUS_CONFIG[selected.status ?? "DRAFT"] ?? STATUS_CONFIG.DRAFT;
     return (
       <div className="p-6 space-y-6 animated-fade-in">
         <div className="flex items-center gap-3">
@@ -458,7 +458,7 @@ export default function PurchaseOrdersPage() {
             </TableHeader>
             <TableBody>
               {filtered.map((po) => {
-                const sc = STATUS_CONFIG[po.status ?? "DRAFT"];
+                const sc = STATUS_CONFIG[po.status ?? "DRAFT"] ?? STATUS_CONFIG.DRAFT;
                 return (
                   <TableRow key={po.id} className="cursor-pointer hover:bg-muted/30" onClick={() => { setSelected(po); setView("detail"); }}>
                     <TableCell className="font-semibold text-primary">{po.number}</TableCell>

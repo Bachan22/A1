@@ -4,8 +4,22 @@ import { contentPostsTable, clientsTable, clientCalendarSharesTable } from "@wor
 import { eq, and } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
+import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
 
 const router = Router();
+
+function sanitizeContentPost(body: any, isUpdate = false) {
+  return sanitizeAndValidate(body, {
+    uuids: ["clientId"],
+    textDates: ["scheduledAt", "shootDate"],
+    enums: {
+      platform: ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE", "PINTEREST"],
+      contentType: ["POST", "REEL", "STORY", "CAROUSEL", "VIDEO", "SHORTS"],
+      status: ["IDEA", "SCRIPTING", "PRODUCTION", "SCHEDULING", "POSTED"],
+      approvalStatus: ["PENDING", "APPROVED", "REJECTED"],
+    }
+  });
+}
 
 const CONTENT_COLUMNS = {
   id: contentPostsTable.id,
@@ -43,18 +57,17 @@ router.get("/", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
-  if (!body.clientId) body.clientId = null;
-  if (!body.referenceUrl) body.referenceUrl = null;
-  if (!body.description) body.description = null;
-  const [row] = await db.insert(contentPostsTable).values(body).returning();
+  const sanitized = sanitizeContentPost(body, false);
+  const [row] = await db.insert(contentPostsTable).values(sanitized).returning();
   return res.status(201).json(row);
 }));
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
+  const sanitized = sanitizeContentPost(body, true);
   const [row] = await db
     .update(contentPostsTable)
-    .set(body)
+    .set(sanitized)
     .where(eq(contentPostsTable.id, (req.params.id as string)))
     .returning();
   if (!row) throw createError("Not found", 404);
@@ -95,16 +108,25 @@ router.post("/:id/reject", asyncHandler(async (req, res) => {
 router.post("/shares", asyncHandler(async (req, res) => {
   const { clientId, label, expiresAt } = req.body;
   if (!clientId) throw createError("clientId is required", 400);
+  if (!isValidUUID(clientId)) {
+    throw createError("Invalid clientId format", 400);
+  }
+
+  const sanitized = sanitizeAndValidate({ clientId, label, expiresAt }, {
+    uuids: ["clientId"],
+    dates: ["expiresAt"],
+  });
+
   const { randomUUID } = await import("crypto");
   const shareToken = randomUUID();
 
   const [share] = await db
     .insert(clientCalendarSharesTable)
     .values({
-      clientId,
+      clientId: sanitized.clientId,
       shareToken,
-      label: label ?? null,
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      label: sanitized.label ?? null,
+      expiresAt: sanitized.expiresAt ?? null,
     })
     .returning();
 

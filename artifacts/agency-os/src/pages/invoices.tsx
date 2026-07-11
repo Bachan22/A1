@@ -771,7 +771,7 @@ export default function InvoicesPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filtered.map(inv => {
-                const sc = STATUS_CONFIG[inv.status ?? "DRAFT"];
+                const sc = STATUS_CONFIG[inv.status ?? "DRAFT"] ?? STATUS_CONFIG.DRAFT;
                 const currSym = sym(inv.currency ?? "INR");
                 return (
                   <tr key={inv.id} className="hover:bg-muted/20 transition-colors cursor-pointer"

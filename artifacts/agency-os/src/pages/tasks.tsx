@@ -220,7 +220,7 @@ export default function TasksPage() {
 
                 <div className="p-2 space-y-2 min-h-16">
                   {colTasks.map((task) => {
-                    const pc = PRIORITY_CONFIG[task.priority ?? "MEDIUM"];
+                    const pc = PRIORITY_CONFIG[task.priority ?? "MEDIUM"] ?? PRIORITY_CONFIG.MEDIUM;
                     const isOverdue = task.dueDate && task.status !== "DONE" && isBefore(parseISO(task.dueDate), startOfDay(new Date()));
                     return (
                       <div

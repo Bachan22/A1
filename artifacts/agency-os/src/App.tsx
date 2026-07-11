@@ -1,8 +1,63 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, createContext, useContext, Component, ErrorInfo, ReactNode } from "react";
 import type { User } from "@workspace/api-client-react";
+
+// ─── React Error Boundary ──────────────────────────────────────
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorId: string;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    errorId: "",
+  };
+
+  public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+    const errorId = "ERR-" + Math.random().toString(36).substring(2, 11).toUpperCase();
+    return { hasError: true, errorId };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+          <div className="w-full max-w-md p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg text-center space-y-4">
+            <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto text-xl">
+              ⚠️
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50 font-heading">Something went wrong.</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              An unexpected component crash occurred. Click reload below to refresh the page.
+            </p>
+            <div className="text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 p-2.5 rounded select-all border border-slate-200 dark:border-slate-700">
+              Error ID: {this.state.errorId}
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-2 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-50 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-sm transition-colors cursor-pointer"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // ─── Auth Context ───────────────────────────────────────────────
 type AuthContextType = {
@@ -343,16 +398,18 @@ function AppRouter() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AuthProvider>
-          <WouterRouter base={BASE}>
-            <AppRouter />
-          </WouterRouter>
-          <Toaster richColors position="top-right" />
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <AuthProvider>
+            <WouterRouter base={BASE}>
+              <AppRouter />
+            </WouterRouter>
+            <Toaster richColors position="top-right" />
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

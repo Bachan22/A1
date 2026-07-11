@@ -4,6 +4,7 @@ import { agencySettings } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../lib/asyncHandler";
+import { sanitizeAndValidate } from "../lib/validation";
 
 const router = Router();
 
@@ -35,8 +36,11 @@ router.get("/settings", requireAuth, asyncHandler(async (_req, res) => {
 router.patch("/settings", requireAuth, asyncHandler(async (req, res) => {
   await ensureSettings();
   const { id: _id, ...body } = req.body;
+  const sanitized = sanitizeAndValidate(body, {
+    numbers: ["taxPercent"],
+  });
   const [updated] = await db.update(agencySettings)
-    .set({ ...body, updatedAt: new Date() })
+    .set({ ...sanitized, updatedAt: new Date() })
     .where(eq(agencySettings.id, "default"))
     .returning();
   return res.json({ ...updated, updatedAt: updated.updatedAt?.toISOString() ?? null });
