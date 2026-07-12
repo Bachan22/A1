@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -23,7 +24,7 @@ function sanitizeLead(body: any, isUpdate = false) {
   });
 }
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("sales.view"), asyncHandler(async (req, res) => {
   const rows = await db.select().from(leadsTable);
   const now = Date.now();
   const result = rows.map((lead) => ({
@@ -35,7 +36,7 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(result);
 }));
 
-router.get("/pipeline-summary", asyncHandler(async (req, res) => {
+router.get("/pipeline-summary", requirePermission("sales.view"), asyncHandler(async (req, res) => {
   const rows = await db
     .select({
       stage: leadsTable.stage,
@@ -54,7 +55,7 @@ router.get("/pipeline-summary", asyncHandler(async (req, res) => {
   return res.json(summary);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("sales.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeLead(body, false);
   const [row] = await db
@@ -64,7 +65,7 @@ router.post("/", asyncHandler(async (req, res) => {
   return res.status(201).json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("sales.edit"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeLead(body, true);
   const updates: Record<string, unknown> = { ...sanitized };
@@ -78,7 +79,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("sales.delete"), asyncHandler(async (req, res) => {
   await db.delete(leadsTable).where(eq(leadsTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));

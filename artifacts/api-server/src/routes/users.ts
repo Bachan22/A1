@@ -6,6 +6,7 @@ import { hash } from "bcryptjs";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -32,25 +33,12 @@ function parseModules(row: { allowedModules: string | null }) {
   return { ...row, allowedModules: row.allowedModules ? JSON.parse(row.allowedModules) : [] };
 }
 
-const requireAdmin = asyncHandler(async (req: any, res: any, next: any) => {
-  const userId = req.userId;
-  if (!userId) throw createError("Unauthorized", 401);
-  const [user] = await db
-    .select({ systemRole: usersTable.systemRole })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
-  if (!user || user.systemRole !== "SUPER_ADMIN") {
-    throw createError("Forbidden: Admin access required", 403);
-  }
-  next();
-});
-
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("users.view"), asyncHandler(async (req, res) => {
   const rows = await db.select(USER_SAFE_COLS).from(usersTable);
   return res.json(rows.map(parseModules));
 }));
 
-router.post("/", requireAdmin, asyncHandler(async (req, res) => {
+router.post("/", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   const { name, email, password, systemRole, department, isActive, allowedModules } = req.body;
   if (!name || !email) throw createError("Name and email are required", 400);
 
@@ -81,7 +69,7 @@ router.post("/", requireAdmin, asyncHandler(async (req, res) => {
   return res.status(201).json(parseModules(row));
 }));
 
-router.patch("/:id", requireAdmin, asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, password: _pw, ...body } = req.body;
 
   if (body.email) {
@@ -109,7 +97,7 @@ router.patch("/:id", requireAdmin, asyncHandler(async (req, res) => {
   return res.json(parseModules(row));
 }));
 
-router.delete("/:id", requireAdmin, asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   await db.delete(usersTable).where(eq(usersTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));

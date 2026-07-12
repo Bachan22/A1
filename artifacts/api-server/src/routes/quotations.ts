@@ -6,6 +6,7 @@ import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 import { sanitizeAndValidate, validateLineItems, isValidUUID } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -63,7 +64,7 @@ async function generateQuotationNumber(): Promise<string> {
   return `QT-${n}`;
 }
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("quotations.view"), asyncHandler(async (req, res) => {
   const rows = await db
     .select({
       id: quotationsTable.id,
@@ -114,13 +115,13 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows.map((r) => ({ ...r, clientName: r.clientName || r.joinedClientName || null })));
 }));
 
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", requirePermission("quotations.view"), asyncHandler(async (req, res) => {
   const [row] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, (req.params.id as string)));
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("quotations.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeQuotation(body, false);
   if (!sanitized.number) sanitized.number = await generateQuotationNumber();
@@ -128,7 +129,7 @@ router.post("/", asyncHandler(async (req, res) => {
   return res.status(201).json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("quotations.edit"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid quotation ID format", 400);
   }
@@ -139,7 +140,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("quotations.delete"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid quotation ID format", 400);
   }
@@ -147,7 +148,7 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   return res.status(204).send();
 }));
 
-router.post("/:id/convert-to-invoice", asyncHandler(async (req, res) => {
+router.post("/:id/convert-to-invoice", requirePermission("quotations.edit"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid quotation ID format", 400);
   }

@@ -5,6 +5,7 @@ import { eq, ilike, or, and } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 function sanitizeClient(body: any, isUpdate = false) {
   if (!isUpdate && (!body.companyName || typeof body.companyName !== "string" || body.companyName.trim() === "")) {
@@ -45,7 +46,7 @@ function calcHealthScore(invoices: { status: string | null; dueDate: string | nu
 
 const router = Router();
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("clients.view"), asyncHandler(async (req, res) => {
   const { search, category } = req.query as Record<string, string>;
 
   const conditions = [];
@@ -67,20 +68,20 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("clients.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeClient(body, false);
   const [row] = await db.insert(clientsTable).values(sanitized).returning();
   return res.status(201).json(row);
 }));
 
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", requirePermission("clients.view"), asyncHandler(async (req, res) => {
   const [row] = await db.select().from(clientsTable).where(eq(clientsTable.id, (req.params.id as string)));
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("clients.edit"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeClient(body, true);
   const [row] = await db
@@ -92,12 +93,12 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("clients.delete"), asyncHandler(async (req, res) => {
   await db.delete(clientsTable).where(eq(clientsTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));
 
-router.post("/:id/recalculate-health", asyncHandler(async (req, res) => {
+router.post("/:id/recalculate-health", requirePermission("clients.edit"), asyncHandler(async (req, res) => {
   const clientId = req.params.id as string;
   const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId));
   if (!client) throw createError("Not found", 404);
@@ -117,7 +118,7 @@ router.post("/:id/recalculate-health", asyncHandler(async (req, res) => {
   return res.json({ health, client: updated });
 }));
 
-router.get("/:id/contracts", asyncHandler(async (req, res) => {
+router.get("/:id/contracts", requirePermission("clients.view"), asyncHandler(async (req, res) => {
   const invoices = await db
     .select()
     .from(invoicesTable)

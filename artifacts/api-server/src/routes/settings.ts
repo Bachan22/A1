@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { agencySettings } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requirePermission } from "../middleware/auth";
 import { asyncHandler } from "../lib/asyncHandler";
 import { sanitizeAndValidate } from "../lib/validation";
 
@@ -28,12 +28,12 @@ async function ensureSettings() {
   return settings;
 }
 
-router.get("/settings", requireAuth, asyncHandler(async (_req, res) => {
+router.get("/settings", requirePermission("settings.view"), asyncHandler(async (_req, res) => {
   const settings = await ensureSettings();
   return res.json({ ...settings, updatedAt: settings.updatedAt?.toISOString() ?? null });
 }));
 
-router.patch("/settings", requireAuth, asyncHandler(async (req, res) => {
+router.patch("/settings", requirePermission("settings.update"), asyncHandler(async (req, res) => {
   await ensureSettings();
   const { id: _id, ...body } = req.body;
   const sanitized = sanitizeAndValidate(body, {

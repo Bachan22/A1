@@ -91,7 +91,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const filteredNavGroups = navGroups.map(group => {
     const filteredItems = group.items.filter(item => {
       if (item.href === "/dashboard") return true;
+
+      // Strictly Admin-only paths
+      const adminOnlyPaths = [
+        "/settings",
+        "/users",
+        "/purchase-orders",
+      ];
+
+      if (adminOnlyPaths.includes(item.href)) {
+        return isAdmin;
+      }
+
       if (isAdmin) return true;
+
+      if (item.href === "/hawan") return true;
+
+      if (item.href === "/excel-reports") {
+        return userAllowedModules.includes("invoices") ||
+               userAllowedModules.includes("quotations") ||
+               userAllowedModules.includes("proposals");
+      }
 
       const pathMap: Record<string, string> = {
         "/clients": "clients",
@@ -99,15 +119,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         "/projects": "projects",
         "/tasks": "tasks",
         "/content": "content",
-        "/hawan": "hawan",
         "/invoices": "invoices",
         "/quotations": "quotations",
-        "/purchase-orders": "purchaseOrders",
         "/proposals": "proposals",
         "/attendance": "attendance",
         "/leaves": "leaves",
-        "/users": "team",
-        "/settings": "settings",
       };
 
       const moduleKey = pathMap[item.href];

@@ -2,17 +2,22 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { attendance, users } from "@workspace/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { requireAuth } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { isValidUUID } from "../lib/validation";
 
 const router = Router();
 
-router.get("/attendance", requireAuth, asyncHandler(async (req, res) => {
+router.get("/attendance", requirePermission("attendance.view"), asyncHandler(async (req, res) => {
   const { userId, month } = req.query as Record<string, string>;
+  const requesterId = (req as any).userId;
+  const requesterRole = (req as any).userRole;
+
   const conditions = [];
-  if (userId) {
+  if (requesterRole === "EMPLOYEE") {
+    conditions.push(eq(attendance.userId, requesterId));
+  } else if (userId) {
     if (!isValidUUID(userId)) {
       throw createError("Invalid userId format", 400);
     }
@@ -50,7 +55,7 @@ router.get("/attendance", requireAuth, asyncHandler(async (req, res) => {
   })));
 }));
 
-router.post("/attendance/check-in", requireAuth, asyncHandler(async (req, res) => {
+router.post("/attendance/check-in", requirePermission("attendance.manage"), asyncHandler(async (req, res) => {
   const userId = (req as any).userId;
   const [user] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId));
   if (!user) throw createError("Unauthorized", 401);
@@ -81,7 +86,7 @@ router.post("/attendance/check-in", requireAuth, asyncHandler(async (req, res) =
   });
 }));
 
-router.post("/attendance/check-out", requireAuth, asyncHandler(async (req, res) => {
+router.post("/attendance/check-out", requirePermission("attendance.manage"), asyncHandler(async (req, res) => {
   const userId = (req as any).userId;
   const [user] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId));
   if (!user) throw createError("Unauthorized", 401);
@@ -111,7 +116,7 @@ router.post("/attendance/check-out", requireAuth, asyncHandler(async (req, res) 
   });
 }));
 
-router.get("/attendance/today", requireAuth, asyncHandler(async (req, res) => {
+router.get("/attendance/today", requirePermission("attendance.manage"), asyncHandler(async (req, res) => {
   const userId = (req as any).userId;
   const today = new Date().toISOString().slice(0, 10);
   const record = await db.query.attendance.findFirst({

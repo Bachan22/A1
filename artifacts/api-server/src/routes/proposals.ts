@@ -6,6 +6,7 @@ import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 import { sanitizeAndValidate, validateLineItems, isValidUUID } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -41,7 +42,7 @@ const proposalSyncConfig = {
   },
 };
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("proposals.view"), asyncHandler(async (req, res) => {
   const rows = await db
     .select({
       id: proposalsTable.id,
@@ -63,14 +64,14 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("proposals.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeProposal(body, false);
   const row = await syncParentInsert(proposalSyncConfig, sanitized, req.body);
   return res.status(201).json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("proposals.edit"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid proposal ID format", 400);
   }
@@ -81,7 +82,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("proposals.delete"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid proposal ID format", 400);
   }

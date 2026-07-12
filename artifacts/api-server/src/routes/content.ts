@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -45,7 +46,7 @@ const CONTENT_COLUMNS = {
   createdAt: contentPostsTable.createdAt,
 };
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("content.view"), asyncHandler(async (req, res) => {
   const { clientId } = req.query as Record<string, string>;
   const rows = await db
     .select(CONTENT_COLUMNS)
@@ -55,14 +56,14 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("content.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeContentPost(body, false);
   const [row] = await db.insert(contentPostsTable).values(sanitized).returning();
   return res.status(201).json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("content.edit"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeContentPost(body, true);
   const [row] = await db
@@ -74,15 +75,15 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("content.delete"), asyncHandler(async (req, res) => {
   await db.delete(contentPostsTable).where(eq(contentPostsTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));
 
 // ─── Approval Routes ─────────────────────────────────────────
 
-router.post("/:id/approve", asyncHandler(async (req, res) => {
-  const userId = (req as any).user?.id ?? null;
+router.post("/:id/approve", requirePermission("content.edit"), asyncHandler(async (req, res) => {
+  const userId = (req as any).userId ?? null;
   const [row] = await db
     .update(contentPostsTable)
     .set({ approvalStatus: "APPROVED", approvedBy: userId, approvedAt: new Date() } as any)
@@ -92,7 +93,7 @@ router.post("/:id/approve", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.post("/:id/reject", asyncHandler(async (req, res) => {
+router.post("/:id/reject", requirePermission("content.edit"), asyncHandler(async (req, res) => {
   const { note } = req.body as { note?: string };
   const [row] = await db
     .update(contentPostsTable)
@@ -105,7 +106,7 @@ router.post("/:id/reject", asyncHandler(async (req, res) => {
 
 // ─── Share Calendar Routes ────────────────────────────────────
 
-router.post("/shares", asyncHandler(async (req, res) => {
+router.post("/shares", requirePermission("content.create"), asyncHandler(async (req, res) => {
   const { clientId, label, expiresAt } = req.body;
   if (!clientId) throw createError("clientId is required", 400);
   if (!isValidUUID(clientId)) {
@@ -133,7 +134,7 @@ router.post("/shares", asyncHandler(async (req, res) => {
   return res.status(201).json(share);
 }));
 
-router.get("/shares", asyncHandler(async (req, res) => {
+router.get("/shares", requirePermission("content.view"), asyncHandler(async (req, res) => {
   const { clientId } = req.query;
   const shares = await db
     .select()

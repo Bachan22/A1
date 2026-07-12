@@ -6,6 +6,7 @@ import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { syncParentInsert, syncParentUpdate } from "../lib/dbSync";
 import { sanitizeAndValidate, validateLineItems, isValidUUID } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -40,7 +41,7 @@ const invoiceSyncConfig = {
   }),
 };
 
-router.get("/financial-summary", asyncHandler(async (req, res) => {
+router.get("/financial-summary", requirePermission("invoices.view"), asyncHandler(async (req, res) => {
   const [
     [{ totalRevenue, paidCount }],
     [{ outstanding }],
@@ -55,7 +56,7 @@ router.get("/financial-summary", asyncHandler(async (req, res) => {
   return res.json({ totalRevenue, outstanding, overdue, paidCount, invoiceCount });
 }));
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("invoices.view"), asyncHandler(async (req, res) => {
   const rows = await db
     .select({
       id: invoicesTable.id,
@@ -103,7 +104,7 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("invoices.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeInvoice(body, false);
   if (!sanitized.number) {
@@ -119,7 +120,7 @@ router.post("/", asyncHandler(async (req, res) => {
   return res.status(201).json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("invoices.edit"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid invoice ID format", 400);
   }
@@ -130,7 +131,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("invoices.delete"), asyncHandler(async (req, res) => {
   if (!isValidUUID(req.params.id)) {
     throw createError("Invalid invoice ID format", 400);
   }

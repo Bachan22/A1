@@ -5,10 +5,11 @@ import {
 } from "@workspace/db/schema";
 import { eq, gte, sql, and, lte } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/stats", asyncHandler(async (req, res) => {
+router.get("/stats", requirePermission("reports.view"), asyncHandler(async (req, res) => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
@@ -33,7 +34,7 @@ router.get("/stats", asyncHandler(async (req, res) => {
   return res.json({ totalClients, activeProjects, openLeads, revenuePaid, outstanding, monthlyRevenue, tasksDue });
 }));
 
-router.get("/revenue-chart", asyncHandler(async (req, res) => {
+router.get("/revenue-chart", requirePermission("reports.view"), asyncHandler(async (req, res) => {
   const now = new Date();
   const range = (req.query.range as string) ?? "6m";
 

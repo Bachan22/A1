@@ -17,7 +17,7 @@ router.post("/feedback", asyncHandler(async (req, res) => {
 
   const sanitized = sanitizeAndValidate({ postId, comment });
 
-  const userId = (req as any).user?.id ?? null;
+  const userId = (req as any).userId ?? null;
 
   // Store as a comment on the content post's comments JSON column
   // First fetch the post, then append

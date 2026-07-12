@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -22,7 +23,7 @@ function sanitizeTask(body: any, isUpdate = false) {
   });
 }
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("tasks.view"), asyncHandler(async (req, res) => {
   const rows = await db
     .select({
       id: tasksTable.id,
@@ -42,14 +43,14 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("tasks.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeTask(body, false);
-  const [row] = await db.insert(tasksTable).values(sanitized).returning();
+  const [row] = await db.insert(tasksTable).values({ ...sanitized, createdBy: (req as any).userId }).returning();
   return res.status(201).json(row);
 }));
 
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", requirePermission("tasks.view"), asyncHandler(async (req, res) => {
   const [row] = await db
     .select({
       id: tasksTable.id,
@@ -62,6 +63,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
       assigneeName: usersTable.name,
       dueDate: tasksTable.dueDate,
       description: tasksTable.description,
+      createdBy: tasksTable.createdBy,
     })
     .from(tasksTable)
     .leftJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
@@ -71,26 +73,47 @@ router.get("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("tasks.edit"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeTask(body, true);
+
+  const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, req.params.id as string));
+  if (!task) throw createError("Not found", 404);
+
+  const requesterId = (req as any).userId;
+  const requesterRole = (req as any).userRole;
+
+  if (requesterRole === "EMPLOYEE" && task.createdBy !== requesterId && task.assigneeId !== requesterId) {
+    throw createError("Forbidden: You can only edit tasks you created or are assigned to", 403);
+  }
+
   const [row] = await db
     .update(tasksTable)
-    .set(sanitized)
+    .set({ ...sanitized, updatedBy: requesterId })
     .where(eq(tasksTable.id, (req.params.id as string)))
     .returning();
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("tasks.delete"), asyncHandler(async (req, res) => {
+  const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, req.params.id as string));
+  if (!task) throw createError("Not found", 404);
+
+  const requesterId = (req as any).userId;
+  const requesterRole = (req as any).userRole;
+
+  if (requesterRole === "EMPLOYEE" && task.createdBy !== requesterId) {
+    throw createError("Forbidden: Employees can only delete tasks they created", 403);
+  }
+
   await db.delete(tasksTable).where(eq(tasksTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));
 
 // ─── Subtasks ─────────────────────────────────────────────────
 
-router.get("/:id/subtasks", asyncHandler(async (req, res) => {
+router.get("/:id/subtasks", requirePermission("tasks.view"), asyncHandler(async (req, res) => {
   const result = await db.execute(
     `SELECT t.*, u.name as assignee_name FROM tasks t
      LEFT JOIN users u ON t.assignee_id = u.id

@@ -95,9 +95,49 @@ export default function UsersPage() {
     updateMutation.mutate({ id, data: { isActive } });
   };
 
-  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<UserInput>({
+  const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<UserInput>({
     defaultValues: { name: "", email: "", password: "", systemRole: "ACCOUNT_MANAGER", allowedModules: [] },
   });
+
+  const generateEmail = () => {
+    const nameVal = watch("name");
+    if (!nameVal) {
+      toast.warning("Please enter a full name first");
+      return;
+    }
+    const cleanName = nameVal
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .replace(/\s+/g, ".");
+    setValue("email", `${cleanName}@blinkbeyond.com`);
+    toast.success("Username/Email generated");
+  };
+
+  const generatePassword = () => {
+    const lower = "abcdefghijklmnopqrstuvwxyz";
+    const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const num = "0123456789";
+    const special = "@#$!%*?&";
+    const all = lower + upper + num + special;
+
+    let pass = [
+      lower[Math.floor(Math.random() * lower.length)],
+      upper[Math.floor(Math.random() * upper.length)],
+      num[Math.floor(Math.random() * num.length)],
+      special[Math.floor(Math.random() * special.length)]
+    ];
+
+    for (let i = 0; i < 8; i++) {
+      pass.push(all[Math.floor(Math.random() * all.length)]);
+    }
+
+    // Shuffle
+    pass = pass.sort(() => 0.5 - Math.random());
+
+    setValue("password", pass.join(""));
+    toast.success("Temporary secure password generated");
+  };
 
   const openAdd = () => {
     reset({ name: "", email: "", password: "", systemRole: "ACCOUNT_MANAGER", allowedModules: [] });
@@ -221,14 +261,24 @@ export default function UsersPage() {
               {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input {...register("email", { required: "Required" })} type="email" placeholder="jane@agencyos.com" data-testid="user-email" />
+              <div className="flex items-center justify-between">
+                <Label>Email / Username</Label>
+                <Button type="button" variant="link" className="h-auto p-0 text-xs text-primary" onClick={generateEmail}>
+                  Generate Username
+                </Button>
+              </div>
+              <Input {...register("email", { required: "Required" })} type="email" placeholder="jane@blinkbeyond.com" data-testid="user-email" />
               {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
             </div>
             {!editId && (
               <div className="space-y-1.5">
-                <Label>Password</Label>
-                <Input {...register("password", { required: !editId ? "Required" : false })} type="password" placeholder="••••••••" />
+                <div className="flex items-center justify-between">
+                  <Label>Password</Label>
+                  <Button type="button" variant="link" className="h-auto p-0 text-xs text-primary" onClick={generatePassword}>
+                    Generate Password
+                  </Button>
+                </div>
+                <Input {...register("password", { required: !editId ? "Required" : false })} placeholder="••••••••" />
                 {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
               </div>
             )}

@@ -5,10 +5,11 @@ import { eq, desc } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/:id/contacts", asyncHandler(async (req, res) => {
+router.get("/:id/contacts", requirePermission("sales.view"), asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   if (!isValidUUID(id)) {
     throw createError("Invalid lead ID format", 400);
@@ -21,7 +22,7 @@ router.get("/:id/contacts", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/:id/contacts", asyncHandler(async (req, res) => {
+router.post("/:id/contacts", requirePermission("sales.create"), asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   if (!isValidUUID(id)) {
     throw createError("Invalid lead ID format", 400);
@@ -45,7 +46,7 @@ router.post("/:id/contacts", asyncHandler(async (req, res) => {
   return res.status(201).json(row);
 }));
 
-router.delete("/:id/contacts/:contactId", asyncHandler(async (req, res) => {
+router.delete("/:id/contacts/:contactId", requirePermission("sales.delete"), asyncHandler(async (req, res) => {
   const { id, contactId } = req.params as { id: string; contactId: string };
   if (!isValidUUID(id)) {
     throw createError("Invalid lead ID format", 400);

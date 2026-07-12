@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -22,7 +23,7 @@ function sanitizeProject(body: any) {
   });
 }
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("projects.view"), asyncHandler(async (req, res) => {
   const rows = await db
     .select({
       id: projectsTable.id,
@@ -40,14 +41,14 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("projects.create"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeProject(body);
-  const [row] = await db.insert(projectsTable).values(sanitized).returning();
+  const [row] = await db.insert(projectsTable).values({ ...sanitized, createdBy: (req as any).userId }).returning();
   return res.status(201).json(row);
 }));
 
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", requirePermission("projects.view"), asyncHandler(async (req, res) => {
   const [row] = await db
     .select({
       id: projectsTable.id,
@@ -59,6 +60,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
       startDate: projectsTable.startDate,
       dueDate: projectsTable.dueDate,
       description: projectsTable.description,
+      createdBy: projectsTable.createdBy,
     })
     .from(projectsTable)
     .leftJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
@@ -67,19 +69,39 @@ router.get("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("projects.edit"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, ...body } = req.body;
   const sanitized = sanitizeProject(body);
+  
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.id as string));
+  if (!project) throw createError("Not found", 404);
+
+  const requesterId = (req as any).userId;
+  const requesterRole = (req as any).userRole;
+
+  if (requesterRole === "EMPLOYEE" && project.createdBy !== requesterId) {
+    // Check if assigned any tasks in this project
+    const { tasksTable } = await import("@workspace/db/schema");
+    const { and } = await import("drizzle-orm");
+    const tasks = await db
+      .select()
+      .from(tasksTable)
+      .where(and(eq(tasksTable.projectId, req.params.id as string), eq(tasksTable.assigneeId, requesterId)));
+    if (tasks.length === 0) {
+      throw createError("Forbidden: You can only edit projects you created or are assigned to", 403);
+    }
+  }
+
   const [row] = await db
     .update(projectsTable)
-    .set(sanitized)
+    .set({ ...sanitized, updatedBy: requesterId })
     .where(eq(projectsTable.id, (req.params.id as string)))
     .returning();
   if (!row) throw createError("Not found", 404);
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("projects.delete"), asyncHandler(async (req, res) => {
   await db.delete(projectsTable).where(eq(projectsTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));

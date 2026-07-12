@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
 import { createError } from "../middleware/errorHandler";
 import { sanitizeAndValidate, isValidUUID } from "../lib/validation";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -24,7 +25,7 @@ function sanitizeSocialAccount(body: any, isUpdate = false) {
   });
 }
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requirePermission("clients.view"), asyncHandler(async (req, res) => {
   const { clientId } = req.query as { clientId?: string };
   if (clientId && !isValidUUID(clientId)) {
     throw createError("Invalid clientId format", 400);
@@ -35,7 +36,7 @@ router.get("/", asyncHandler(async (req, res) => {
   return res.json(rows);
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requirePermission("clients.create"), asyncHandler(async (req, res) => {
   const sanitized = sanitizeSocialAccount(req.body, false);
   const [row] = await db
     .insert(clientSocialAccountsTable)
@@ -44,7 +45,7 @@ router.post("/", asyncHandler(async (req, res) => {
   return res.status(201).json(row);
 }));
 
-router.patch("/:id", asyncHandler(async (req, res) => {
+router.patch("/:id", requirePermission("clients.edit"), asyncHandler(async (req, res) => {
   const sanitized = sanitizeSocialAccount(req.body, true);
   const [row] = await db
     .update(clientSocialAccountsTable)
@@ -55,12 +56,12 @@ router.patch("/:id", asyncHandler(async (req, res) => {
   return res.json(row);
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requirePermission("clients.delete"), asyncHandler(async (req, res) => {
   await db.delete(clientSocialAccountsTable).where(eq(clientSocialAccountsTable.id, (req.params.id as string)));
   return res.status(204).send();
 }));
 
-router.post("/ignite", asyncHandler(async (req, res) => {
+router.post("/ignite", requirePermission("clients.edit"), asyncHandler(async (req, res) => {
   const { clientId, caption, platforms, scheduledAt, title, assetsLink } = req.body as {
     clientId: string;
     caption: string;

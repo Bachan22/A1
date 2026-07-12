@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
@@ -31,7 +32,7 @@ const upload = multer({
   },
 });
 
-router.post("/", upload.single("file"), (req, res) => {
+router.post("/", requirePermission("attachments.upload"), upload.single("file"), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });
     return;

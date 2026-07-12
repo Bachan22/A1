@@ -208,6 +208,51 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// ─── Access Denied fallback ─────────────────────────────────────
+function AccessDeniedPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+      <div className="w-full max-w-md p-8 bg-card border border-border rounded-2xl shadow-lg text-center space-y-5">
+        <div className="h-16 w-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto text-2xl font-bold">
+          🚫
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground font-heading">Access Denied</h1>
+          <p className="text-sm text-muted-foreground">
+            You do not have the required permissions to view this section. Please contact your system administrator if you believe this is an error.
+          </p>
+        </div>
+        <button
+          onClick={() => window.location.href = "/dashboard"}
+          className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-all duration-200 shadow-sm shadow-primary/10 hover:shadow"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin route wrapper ────────────────────────────────────────
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-primary to-violet-500 animate-pulse" />
+          <p className="text-sm text-muted-foreground font-medium">Loading AgencyOS...</p>
+        </div>
+      </div>
+    );
+  }
+  if (!user) return <Redirect to="/login" />;
+  if (user.systemRole !== "SUPER_ADMIN") {
+    return <AccessDeniedPage />;
+  }
+  return <>{children}</>;
+}
+
 // ─── Router ─────────────────────────────────────────────────────
 function AppRouter() {
   const { token } = useAuth();
@@ -309,11 +354,11 @@ function AppRouter() {
       </Route>
       <Route path="/purchase-orders">
         {() => (
-          <ProtectedRoute>
+          <AdminRoute>
             <DashboardLayout>
               <PurchaseOrdersPage />
             </DashboardLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         )}
       </Route>
       <Route path="/proposals">
@@ -327,11 +372,11 @@ function AppRouter() {
       </Route>
       <Route path="/users">
         {() => (
-          <ProtectedRoute>
+          <AdminRoute>
             <DashboardLayout>
               <UsersPage />
             </DashboardLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         )}
       </Route>
       <Route path="/attendance">
@@ -348,15 +393,6 @@ function AppRouter() {
           <ProtectedRoute>
             <DashboardLayout>
               <LeavesPage />
-            </DashboardLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/proposals">
-        {() => (
-          <ProtectedRoute>
-            <DashboardLayout>
-              <ProposalsPage />
             </DashboardLayout>
           </ProtectedRoute>
         )}
@@ -381,11 +417,11 @@ function AppRouter() {
       </Route>
       <Route path="/settings">
         {() => (
-          <ProtectedRoute>
+          <AdminRoute>
             <DashboardLayout>
               <SettingsPage />
             </DashboardLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         )}
       </Route>
       <Route path="/">
