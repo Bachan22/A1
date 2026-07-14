@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useListUsers, useCreateUser, useUpdateUser, useDeleteUser,
   getListUsersQueryKey,
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { useForm, Controller } from "react-hook-form";
 import { Plus, Trash2, UserCog, Mail, Pencil } from "lucide-react";
 import { useAuth } from "@/App";
+import { cn } from "@/lib/utils";
 
 const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
   SUPER_ADMIN: { label: "Super Admin", className: "bg-violet-100 text-violet-700" },
@@ -56,8 +57,20 @@ export default function UsersPage() {
   const isAdmin = user?.systemRole === "SUPER_ADMIN";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [failedEmail, setFailedEmail] = useState<string | null>(null);
 
   const { data: users, isLoading } = useListUsers();
+
+  const { register, handleSubmit, control, reset, setValue, watch, setError, clearErrors, formState: { errors } } = useForm<UserInput>({
+    defaultValues: { name: "", email: "", password: "", systemRole: "ACCOUNT_MANAGER", allowedModules: [] },
+  });
+
+  const emailValue = watch("email");
+  useEffect(() => {
+    if (errors.email && emailValue !== failedEmail) {
+      clearErrors("email");
+    }
+  }, [emailValue, failedEmail, clearErrors, errors.email]);
 
   const createMutation = useCreateUser({
     mutation: {
@@ -66,7 +79,20 @@ export default function UsersPage() {
         qc.invalidateQueries({ queryKey: getListUsersQueryKey() });
         setDialogOpen(false);
       },
-      onError: () => toast.error("Failed to add user"),
+      onError: (err: any) => {
+        if (err && err.status === 409) {
+          const errorMsg = err.data?.error || err.message || "";
+          if (errorMsg.toLowerCase().includes("email")) {
+            setFailedEmail(emailValue);
+            setError("email", {
+              type: "manual",
+              message: "This email is already in use. Please use a different email.",
+            });
+            return;
+          }
+        }
+        toast.error("Failed to add user");
+      },
     },
   });
 
@@ -78,7 +104,20 @@ export default function UsersPage() {
         setDialogOpen(false);
         setEditId(null);
       },
-      onError: () => toast.error("Failed to update user"),
+      onError: (err: any) => {
+        if (err && err.status === 409) {
+          const errorMsg = err.data?.error || err.message || "";
+          if (errorMsg.toLowerCase().includes("email")) {
+            setFailedEmail(emailValue);
+            setError("email", {
+              type: "manual",
+              message: "This email is already in use. Please use a different email.",
+            });
+            return;
+          }
+        }
+        toast.error("Failed to update user");
+      },
     },
   });
 
@@ -94,10 +133,6 @@ export default function UsersPage() {
   const toggleActive = (id: string, isActive: boolean) => {
     updateMutation.mutate({ id, data: { isActive } });
   };
-
-  const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<UserInput>({
-    defaultValues: { name: "", email: "", password: "", systemRole: "ACCOUNT_MANAGER", allowedModules: [] },
-  });
 
   const generateEmail = () => {
     const nameVal = watch("name");
@@ -140,12 +175,14 @@ export default function UsersPage() {
   };
 
   const openAdd = () => {
+    setFailedEmail(null);
     reset({ name: "", email: "", password: "", systemRole: "ACCOUNT_MANAGER", allowedModules: [] });
     setEditId(null);
     setDialogOpen(true);
   };
 
   const openEdit = (u: any) => {
+    setFailedEmail(null);
     setEditId(u.id);
     reset({
       name: u.name,
@@ -238,7 +275,7 @@ export default function UsersPage() {
                     <Switch
                       checked={u.isActive ?? true}
                       onCheckedChange={(v) => toggleActive(u.id, v)}
-                      disabled={!isAdmin}
+                      disabled={!isAdmin || u.id === user?.id}
                       data-testid={`toggle-user-${u.id}`}
                     />
                   </div>
@@ -267,7 +304,13 @@ export default function UsersPage() {
                   Generate Username
                 </Button>
               </div>
-              <Input {...register("email", { required: "Required" })} type="email" placeholder="jane@blinkbeyond.com" data-testid="user-email" />
+              <Input
+                {...register("email", { required: "Required" })}
+                type="email"
+                placeholder="jane@blinkbeyond.com"
+                data-testid="user-email"
+                aria-invalid={!!errors.email}
+              />
               {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
             </div>
             {!editId && (

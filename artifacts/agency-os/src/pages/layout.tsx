@@ -143,8 +143,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="w-60 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-y-auto">
         {/* Logo */}
         <div className="h-14 flex items-center gap-2.5 px-4 border-b border-sidebar-border shrink-0">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center">
-            <Briefcase className="h-4 w-4 text-white" />
+          <div className="h-8 w-8 rounded-lg bg-transparent flex items-center justify-center overflow-hidden">
+            <img src="/logo.png" className="h-full w-full object-cover" alt="Blink Beyond" />
           </div>
           <div>
             <p className="text-sm font-semibold leading-tight font-heading">Blink Beyond</p>

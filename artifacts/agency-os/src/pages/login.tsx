@@ -39,8 +39,23 @@ export default function LoginPage() {
         toast.success(`Welcome back, ${data.user.name}!`);
         navigate("/dashboard");
       },
-      onError: () => {
-        toast.error("Invalid email or password.");
+      onError: (err: any) => {
+        const backendMessage =
+          err?.data && typeof err.data === "object"
+            ? err.data?.error
+            : undefined;
+
+        if (backendMessage) {
+          toast.error(backendMessage);
+        } else if (
+          err?.status === 403 &&
+          typeof err?.data === "string" &&
+          err.data.includes("<html")
+        ) {
+          toast.error("Your account has been deactivated. Please contact your administrator.");
+        } else {
+          toast.error("Invalid email or password.");
+        }
       },
     },
   });
@@ -53,8 +68,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center premium-gradient-bg p-4">
       <div className="w-full max-w-md space-y-6 animated-fade-in">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center shadow-lg">
-            <Briefcase className="h-7 w-7 text-white" />
+          <div className="h-14 w-14 rounded-2xl bg-transparent flex items-center justify-center shadow-lg overflow-hidden">
+            <img src="/logo.png" className="h-full w-full object-cover" alt="Blink Beyond" />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold text-foreground">Blink Beyond</h1>

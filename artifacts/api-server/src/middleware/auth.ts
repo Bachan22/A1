@@ -151,20 +151,39 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 };
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export const requireAuth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   const token = header.slice(7);
+  let payload;
   try {
-    const payload = verifyToken(token);
-    (req as Request & { userId: string }).userId = payload.sub;
-    return next();
+    payload = verifyToken(token);
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
-}
+
+  const userId = payload.sub;
+
+  const [user] = await db
+    .select({
+      isActive: usersTable.isActive,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!user.isActive) {
+    return res.status(401).json({ error: "Your account is inactive or pending approval." });
+  }
+
+  (req as Request & { userId: string }).userId = userId;
+  return next();
+});
 
 export function requirePermission(permission: Permission) {
   return asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
@@ -187,7 +206,7 @@ export function requirePermission(permission: Permission) {
     }
 
     if (!user.isActive) {
-      return res.status(403).json({ error: "Your account is inactive or pending approval." });
+      return res.status(401).json({ error: "Your account is inactive or pending approval." });
     }
 
     const role: UserRole = user.systemRole === "SUPER_ADMIN" ? "ADMIN" : "EMPLOYEE";

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   clientsTable, projectsTable, leadsTable, tasksTable, invoicesTable,
+  quotationsTable, purchaseOrdersTable, leaveRequestsTable, usersTable,
 } from "@workspace/db/schema";
 import { eq, gte, sql, and, lte } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
@@ -11,27 +12,432 @@ const router = Router();
 
 router.get("/stats", requirePermission("reports.view"), asyncHandler(async (req, res) => {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const monthStart = `${year}-${month}-01`;
+  const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+  const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+
+  const monthStartTimestamp = new Date(year, now.getMonth(), 1, 0, 0, 0, 0);
+  const monthEndTimestamp = new Date(year, now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const prevMonthStart = new Date(year, now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  const prevMonthEnd = new Date(year, now.getMonth(), 0).toISOString().slice(0, 10);
 
   const [
-    [{ totalClients }],
-    [{ activeProjects }],
-    [{ openLeads }],
-    [{ revenuePaid }],
-    [{ outstanding }],
     [{ monthlyRevenue }],
-    [{ tasksDue }],
+    [{ totalCollected }],
+    [{ outstanding }],
+    [{ quotationValue }],
+    poStatusCounts,
+    [{ totalClients }],
+    [{ activeClients }],
+    [{ newClientsThisMonth }],
+    [{ totalProjects }],
+    [{ runningProjects }],
+    [{ completedProjects }],
+    [{ startedProjectsThisMonth }],
+    [{ overdueProjects }],
+    [{ totalTasks }],
+    [{ pendingTasks }],
+    [{ inProgressTasks }],
+    [{ completedTasks }],
+    [{ overdueTasks }],
+    [{ tasksDueToday }],
+    invoiceStatusCounts,
+    quotationStatusCounts,
+    leadPipelineStages,
+    [{ projectsCompletedThisMonth }],
+    [{ invoicesGeneratedThisMonth }],
+    [{ quotationsGeneratedThisMonth }],
+    [{ purchaseOrdersCreatedThisMonth }],
+    [{ tasksCompletedThisMonth }],
+    upcomingProjects,
+    upcomingInvoices,
+    upcomingTasks,
+    upcomingLeaves,
+    [{ prevMonthRevenue }],
+    projectHealthProjects,
+    projectHealthTasks
   ] = await Promise.all([
+    // 1. Revenue Collected MTD
+    db.select({ monthlyRevenue: sql<number>`coalesce(sum(${invoicesTable.total}),0)::float` }).from(invoicesTable).where(and(eq(invoicesTable.status, "PAID"), gte(invoicesTable.invoiceDate, monthStart), lte(invoicesTable.invoiceDate, monthEnd))),
+    // 2. Revenue Collected Total
+    db.select({ totalCollected: sql<number>`coalesce(sum(${invoicesTable.total}),0)::float` }).from(invoicesTable).where(eq(invoicesTable.status, "PAID")),
+    // 3. Outstanding Revenue
+    db.select({ outstanding: sql<number>`coalesce(sum(${invoicesTable.total}),0)::float` }).from(invoicesTable).where(sql`${invoicesTable.status} in ('SENT','UNPAID','OVERDUE')`),
+    // 4. Quotation Value
+    db.select({ quotationValue: sql<number>`coalesce(sum(${quotationsTable.total}),0)::float` }).from(quotationsTable),
+    // 5. Purchase Order status counts
+    db.select({ status: purchaseOrdersTable.status, count: sql<number>`count(*)::int`, total: sql<number>`coalesce(sum(${purchaseOrdersTable.total}),0)::float` }).from(purchaseOrdersTable).groupBy(purchaseOrdersTable.status),
+    
+    // 6. Clients: Total
     db.select({ totalClients: sql<number>`count(*)::int` }).from(clientsTable),
-    db.select({ activeProjects: sql<number>`count(*)::int` }).from(projectsTable).where(eq(projectsTable.status, "IN_PROGRESS")),
-    db.select({ openLeads: sql<number>`count(*)::int` }).from(leadsTable).where(sql`${leadsTable.stage} not in ('CLOSED_WON','CLOSED_LOST','WON','LOST')`),
-    db.select({ revenuePaid: sql<number>`coalesce(sum(total),0)::float` }).from(invoicesTable).where(eq(invoicesTable.status, "PAID")),
-    db.select({ outstanding: sql<number>`coalesce(sum(total),0)::float` }).from(invoicesTable).where(sql`${invoicesTable.status} in ('SENT','DRAFT','OVERDUE')`),
-    db.select({ monthlyRevenue: sql<number>`coalesce(sum(total),0)::float` }).from(invoicesTable).where(and(eq(invoicesTable.status, "PAID"), gte(invoicesTable.invoiceDate, monthStart))),
-    db.select({ tasksDue: sql<number>`count(*)::int` }).from(tasksTable).where(and(sql`${tasksTable.status} != 'DONE'`, lte(tasksTable.dueDate, now))),
+    // Clients: Active (distinct clients with projects not completed or cancelled)
+    db.select({ activeClients: sql<number>`count(distinct ${projectsTable.clientId})::int` }).from(projectsTable).where(sql`${projectsTable.status} not in ('COMPLETED', 'CANCELLED')`),
+    // Clients: New this month
+    db.select({ newClientsThisMonth: sql<number>`count(*)::int` }).from(clientsTable).where(gte(clientsTable.createdAt, monthStartTimestamp)),
+    
+    // 7. Projects: Total
+    db.select({ totalProjects: sql<number>`count(*)::int` }).from(projectsTable),
+    // Projects: Running
+    db.select({ runningProjects: sql<number>`count(*)::int` }).from(projectsTable).where(sql`${projectsTable.status} not in ('COMPLETED', 'CANCELLED')`),
+    // Projects: Completed
+    db.select({ completedProjects: sql<number>`count(*)::int` }).from(projectsTable).where(eq(projectsTable.status, "COMPLETED")),
+    // Projects: Started this month
+    db.select({ startedProjectsThisMonth: sql<number>`count(*)::int` }).from(projectsTable).where(gte(projectsTable.createdAt, monthStartTimestamp)),
+    // Projects: Overdue (not completed, has past due date)
+    db.select({ overdueProjects: sql<number>`count(*)::int` }).from(projectsTable).where(and(sql`${projectsTable.status} not in ('COMPLETED', 'CANCELLED')`, lte(projectsTable.dueDate, now))),
+
+    // 8. Tasks: Total
+    db.select({ totalTasks: sql<number>`count(*)::int` }).from(tasksTable),
+    // Tasks: Pending (TODO)
+    db.select({ pendingTasks: sql<number>`count(*)::int` }).from(tasksTable).where(eq(tasksTable.status, "TODO")),
+    // Tasks: In Progress
+    db.select({ inProgressTasks: sql<number>`count(*)::int` }).from(tasksTable).where(eq(tasksTable.status, "IN_PROGRESS")),
+    // Tasks: Completed
+    db.select({ completedTasks: sql<number>`count(*)::int` }).from(tasksTable).where(eq(tasksTable.status, "COMPLETED")),
+    // Tasks: Overdue
+    db.select({ overdueTasks: sql<number>`count(*)::int` }).from(tasksTable).where(and(sql`${tasksTable.status} != 'COMPLETED'`, lte(tasksTable.dueDate, now))),
+    // Tasks: Due Today
+    db.select({ tasksDueToday: sql<number>`count(*)::int` }).from(tasksTable).where(and(
+      sql`${tasksTable.status} != 'COMPLETED'`,
+      gte(tasksTable.dueDate, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)),
+      lte(tasksTable.dueDate, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
+    )),
+
+    // 9. Invoice status counts
+    db.select({ status: invoicesTable.status, count: sql<number>`count(*)::int` }).from(invoicesTable).groupBy(invoicesTable.status),
+    // 10. Quotation status counts
+    db.select({ status: quotationsTable.status, count: sql<number>`count(*)::int` }).from(quotationsTable).groupBy(quotationsTable.status),
+    // 11. Lead Pipeline stages
+    db.select({ stage: leadsTable.stage, count: sql<number>`count(*)::int`, value: sql<number>`coalesce(sum(${leadsTable.value}),0)::float` }).from(leadsTable).groupBy(leadsTable.stage),
+
+    // 12. This Month Completed Projects
+    db.select({ projectsCompletedThisMonth: sql<number>`count(*)::int` }).from(projectsTable).where(and(eq(projectsTable.status, "COMPLETED"), gte(projectsTable.updatedAt, monthStartTimestamp))),
+    // This Month Invoices Generated
+    db.select({ invoicesGeneratedThisMonth: sql<number>`count(*)::int` }).from(invoicesTable).where(and(gte(invoicesTable.invoiceDate, monthStart), lte(invoicesTable.invoiceDate, monthEnd))),
+    // This Month Quotations Generated
+    db.select({ quotationsGeneratedThisMonth: sql<number>`count(*)::int` }).from(quotationsTable).where(and(gte(quotationsTable.quotationDate, monthStart), lte(quotationsTable.quotationDate, monthEnd))),
+    // This Month Purchase Orders Created
+    db.select({ purchaseOrdersCreatedThisMonth: sql<number>`count(*)::int` }).from(purchaseOrdersTable).where(and(gte(purchaseOrdersTable.orderDate, monthStart), lte(purchaseOrdersTable.orderDate, monthEnd))),
+    // This Month Tasks Completed
+    db.select({ tasksCompletedThisMonth: sql<number>`count(*)::int` }).from(tasksTable).where(and(eq(tasksTable.status, "COMPLETED"), gte(tasksTable.updatedAt, monthStartTimestamp))),
+
+    // Upcoming limits
+    db.select({ id: projectsTable.id, name: projectsTable.name, status: projectsTable.status, dueDate: projectsTable.dueDate }).from(projectsTable).where(and(sql`${projectsTable.status} not in ('COMPLETED', 'CANCELLED')`, sql`${projectsTable.dueDate} is not null`)).orderBy(projectsTable.dueDate).limit(5),
+    db.select({ id: invoicesTable.id, number: invoicesTable.number, status: invoicesTable.status, dueDate: invoicesTable.dueDate, total: invoicesTable.total }).from(invoicesTable).where(and(sql`${invoicesTable.status} in ('SENT', 'UNPAID', 'OVERDUE')`, sql`${invoicesTable.dueDate} is not null`)).orderBy(invoicesTable.dueDate).limit(5),
+    db.select({ id: tasksTable.id, title: tasksTable.title, status: tasksTable.status, dueDate: tasksTable.dueDate }).from(tasksTable).where(and(sql`${tasksTable.status} != 'COMPLETED'`, sql`${tasksTable.dueDate} is not null`)).orderBy(tasksTable.dueDate).limit(5),
+    db.select({ id: leaveRequestsTable.id, type: leaveRequestsTable.type, startDate: leaveRequestsTable.startDate, endDate: leaveRequestsTable.endDate, status: leaveRequestsTable.status, userName: usersTable.name })
+      .from(leaveRequestsTable).leftJoin(usersTable, eq(leaveRequestsTable.userId, usersTable.id)).where(and(sql`${leaveRequestsTable.status} in ('PENDING', 'APPROVED')`, sql`${leaveRequestsTable.startDate} is not null`)).orderBy(leaveRequestsTable.startDate).limit(5),
+    
+    // Last month revenue for comparison
+    db.select({ prevMonthRevenue: sql<number>`coalesce(sum(${invoicesTable.total}),0)::float` }).from(invoicesTable).where(and(eq(invoicesTable.status, "PAID"), gte(invoicesTable.invoiceDate, prevMonthStart), lte(invoicesTable.invoiceDate, prevMonthEnd))),
+    // Project Health: Projects
+    db.select({ id: projectsTable.id, status: projectsTable.status, dueDate: projectsTable.dueDate }).from(projectsTable),
+    // Project Health: Tasks
+    db.select({ projectId: tasksTable.projectId, status: tasksTable.status }).from(tasksTable),
   ]);
 
-  return res.json({ totalClients, activeProjects, openLeads, revenuePaid, outstanding, monthlyRevenue, tasksDue });
+  // Map PO status counts to the requested metrics (Pending, Approved, Completed)
+  let poTotal = 0;
+  let poPending = 0; // DRAFT, SENT, PENDING
+  let poApproved = 0; // APPROVED, ORDERED
+  let poCompleted = 0; // RECEIVED, COMPLETED, DELIVERED
+
+  for (const item of poStatusCounts) {
+    const status = item.status ?? "";
+    const count = item.count;
+    poTotal += count;
+    if (["DRAFT", "SENT", "PENDING"].includes(status)) {
+      poPending += count;
+    } else if (["APPROVED", "ORDERED"].includes(status)) {
+      poApproved += count;
+    } else if (["RECEIVED", "COMPLETED", "DELIVERED"].includes(status)) {
+      poCompleted += count;
+    }
+  }
+
+  const invoicesAnalytics = {
+    draft: 0,
+    sent: 0,
+    paid: 0,
+    overdue: 0,
+    cancelled: 0,
+  };
+  for (const item of invoiceStatusCounts) {
+    const status = (item.status ?? "").toLowerCase();
+    if (status === "draft") invoicesAnalytics.draft += item.count;
+    else if (status === "sent") invoicesAnalytics.sent += item.count;
+    else if (status === "paid") invoicesAnalytics.paid += item.count;
+    else if (status === "overdue") invoicesAnalytics.overdue += item.count;
+    else if (status === "cancelled") invoicesAnalytics.cancelled += item.count;
+  }
+
+  const quotationsAnalytics = {
+    draft: 0,
+    sent: 0,
+    accepted: 0,
+    rejected: 0,
+    expired: 0,
+  };
+  for (const item of quotationStatusCounts) {
+    const status = (item.status ?? "").toLowerCase();
+    if (status === "draft") quotationsAnalytics.draft += item.count;
+    else if (status === "sent") quotationsAnalytics.sent += item.count;
+    else if (status === "accepted" || status === "won") quotationsAnalytics.accepted += item.count;
+    else if (status === "rejected" || status === "lost") quotationsAnalytics.rejected += item.count;
+    else if (status === "expired") quotationsAnalytics.expired += item.count;
+  }
+
+  const purchaseOrderAnalytics = {
+    pending: 0,
+    approved: 0,
+    ordered: 0,
+    completed: 0,
+  };
+  for (const item of poStatusCounts) {
+    const status = (item.status ?? "").toLowerCase();
+    if (status === "draft" || status === "pending") purchaseOrderAnalytics.pending += item.count;
+    else if (status === "approved") purchaseOrderAnalytics.approved += item.count;
+    else if (status === "sent" || status === "ordered") purchaseOrderAnalytics.ordered += item.count;
+    else if (status === "delivered" || status === "completed" || status === "received") purchaseOrderAnalytics.completed += item.count;
+  }
+
+  const pipelineStages = [
+    { stage: "LEAD", label: "New", count: 0, value: 0 },
+    { stage: "CONTACTED", label: "Contacted", count: 0, value: 0 },
+    { stage: "DEMO_GIVEN", label: "Qualified", count: 0, value: 0 },
+    { stage: "PROPOSAL_SENT", label: "Proposal", count: 0, value: 0 },
+    { stage: "NEGOTIATION", label: "Negotiation", count: 0, value: 0 },
+    { stage: "WON", label: "Won", count: 0, value: 0 },
+    { stage: "LOST", label: "Lost", count: 0, value: 0 },
+  ];
+  let totalPipelineValue = 0;
+  for (const item of leadPipelineStages) {
+    const st = item.stage ?? "LEAD";
+    const mapped = pipelineStages.find((p) => p.stage === st);
+    if (mapped) {
+      mapped.count = item.count;
+      mapped.value = item.value;
+    }
+    if (!["WON", "LOST"].includes(st)) {
+      totalPipelineValue += item.value;
+    }
+  }
+
+  const upcomingDeadlines: any[] = [];
+
+  // 1. Projects
+  for (const p of upcomingProjects) {
+    if (p.dueDate) {
+      upcomingDeadlines.push({
+        id: `project-${p.id}`,
+        type: "project",
+        title: p.name,
+        date: p.dueDate.toISOString(),
+        status: p.status,
+        overdue: new Date(p.dueDate) < now,
+        extraInfo: p.status,
+      });
+    }
+  }
+
+  // 2. Invoices
+  for (const inv of upcomingInvoices) {
+    if (inv.dueDate) {
+      const due = new Date(inv.dueDate);
+      upcomingDeadlines.push({
+        id: `invoice-${inv.id}`,
+        type: "invoice",
+        title: `Invoice #${inv.number ?? "Unknown"}`,
+        date: inv.dueDate,
+        status: inv.status,
+        overdue: due < now,
+        extraInfo: `₹${(inv.total ?? 0).toLocaleString("en-IN")}`,
+      });
+    }
+  }
+
+  // 3. Tasks
+  for (const t of upcomingTasks) {
+    if (t.dueDate) {
+      upcomingDeadlines.push({
+        id: `task-${t.id}`,
+        type: "task",
+        title: t.title,
+        date: t.dueDate.toISOString(),
+        status: t.status,
+        overdue: new Date(t.dueDate) < now,
+        extraInfo: t.status,
+      });
+    }
+  }
+
+  // 4. Leaves
+  for (const lv of upcomingLeaves) {
+    if (lv.startDate) {
+      const start = new Date(lv.startDate);
+      upcomingDeadlines.push({
+        id: `leave-${lv.id}`,
+        type: "leave",
+        title: `${lv.userName ?? "Employee"} Leave`,
+        date: lv.startDate,
+        status: lv.status,
+        overdue: start < now && lv.status === "PENDING",
+        extraInfo: `${lv.type} (${lv.status})`,
+      });
+    }
+  }
+
+  upcomingDeadlines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Calculate project health
+  const projectTasksMap: Record<string, { total: number; incomplete: number }> = {};
+  for (const t of projectHealthTasks) {
+    if (t.projectId) {
+      if (!projectTasksMap[t.projectId]) {
+        projectTasksMap[t.projectId] = { total: 0, incomplete: 0 };
+      }
+      projectTasksMap[t.projectId].total++;
+      if (t.status !== "COMPLETED") {
+        projectTasksMap[t.projectId].incomplete++;
+      }
+    }
+  }
+
+  let projectHealthOnTrack = 0;
+  let projectHealthAtRisk = 0;
+  let projectHealthDelayed = 0;
+  let projectHealthCompleted = 0;
+
+  for (const p of projectHealthProjects) {
+    const status = p.status ?? "";
+    if (status === "COMPLETED") {
+      projectHealthCompleted++;
+      continue;
+    }
+    if (status === "CANCELLED" || status === "ON_HOLD") {
+      projectHealthDelayed++;
+      continue;
+    }
+
+    const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+    const taskInfo = projectTasksMap[p.id] || { total: 0, incomplete: 0 };
+    const hasIncompleteTasks = taskInfo.incomplete > 0;
+
+    if (dueDate) {
+      const diffTime = dueDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 0) {
+        projectHealthAtRisk++;
+      } else if (diffDays <= 7 && hasIncompleteTasks) {
+        projectHealthAtRisk++;
+      } else {
+        projectHealthOnTrack++;
+      }
+    } else {
+      projectHealthOnTrack++;
+    }
+  }
+
+  const unpaidCount = invoicesAnalytics.sent + invoicesAnalytics.overdue;
+  const pendingQuotationsCount = quotationsAnalytics.draft + quotationsAnalytics.sent;
+
+  const quickInsights: string[] = [];
+
+  if (unpaidCount > 0) {
+    quickInsights.push(`You have ${unpaidCount} unpaid invoice${unpaidCount > 1 ? "s" : ""}.`);
+  }
+
+  if (pendingQuotationsCount > 0) {
+    quickInsights.push(`${pendingQuotationsCount} quotation${pendingQuotationsCount > 1 ? "s are" : " is"} waiting for approval or draft.`);
+  }
+
+  if (overdueProjects > 0) {
+    quickInsights.push(`${overdueProjects} project${overdueProjects > 1 ? "s are" : " is"} overdue.`);
+  }
+
+  if (overdueTasks > 0) {
+    quickInsights.push(`${overdueTasks} task${overdueTasks > 1 ? "s are" : " is"} overdue.`);
+  } else {
+    quickInsights.push("No tasks are overdue.");
+  }
+
+  if (monthlyRevenue > prevMonthRevenue) {
+    if (prevMonthRevenue > 0) {
+      const pct = Math.round(((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100);
+      quickInsights.push(`Revenue increased by ${pct}% compared to last month!`);
+    } else if (monthlyRevenue > 0) {
+      quickInsights.push("Revenue increased compared to last month!");
+    }
+  } else if (monthlyRevenue < prevMonthRevenue && monthlyRevenue > 0) {
+    quickInsights.push("Revenue is currently tracking lower than last month's performance.");
+  }
+
+  return res.json({
+    revenueCollected: {
+      currentMonth: monthlyRevenue,
+      totalCollected: totalCollected,
+    },
+    outstandingRevenue: outstanding,
+    quotationValue: quotationValue,
+    purchaseOrders: {
+      total: poTotal,
+      pending: poPending,
+      approved: poApproved,
+      completed: poCompleted,
+    },
+    projectHealth: {
+      onTrack: projectHealthOnTrack,
+      atRisk: projectHealthAtRisk,
+      delayed: projectHealthDelayed,
+      completed: projectHealthCompleted,
+      total: projectHealthProjects.length,
+    },
+    businessSummary: {
+      clients: {
+        total: totalClients,
+        active: activeClients,
+        newThisMonth: newClientsThisMonth,
+      },
+      projects: {
+        total: totalProjects,
+        running: runningProjects,
+        completed: completedProjects,
+        startedThisMonth: startedProjectsThisMonth,
+        overdue: overdueProjects,
+      },
+      tasks: {
+        total: totalTasks,
+        pending: pendingTasks,
+        inProgress: inProgressTasks,
+        completed: completedTasks,
+        overdue: overdueTasks,
+        dueToday: tasksDueToday,
+      }
+    },
+    invoiceAnalytics: invoicesAnalytics,
+    quotationAnalytics: quotationsAnalytics,
+    purchaseOrderAnalytics: purchaseOrderAnalytics,
+    leadPipeline: {
+      stages: pipelineStages,
+      totalValue: totalPipelineValue,
+    },
+    thisMonthOverview: {
+      projectsCreated: startedProjectsThisMonth,
+      projectsCompleted: projectsCompletedThisMonth,
+      clientsAdded: newClientsThisMonth,
+      invoicesGenerated: invoicesGeneratedThisMonth,
+      quotationsGenerated: quotationsGeneratedThisMonth,
+      purchaseOrdersCreated: purchaseOrdersCreatedThisMonth,
+      tasksCompleted: tasksCompletedThisMonth,
+      revenueCollected: monthlyRevenue,
+    },
+    upcomingDeadlines: upcomingDeadlines.slice(0, 10),
+    quickInsights,
+  });
 }));
 
 router.get("/revenue-chart", requirePermission("reports.view"), asyncHandler(async (req, res) => {
@@ -78,21 +484,75 @@ router.get("/revenue-chart", requirePermission("reports.view"), asyncHandler(asy
 }));
 
 router.get("/project-health", asyncHandler(async (req, res) => {
-  const projects = await db
-    .select({ status: projectsTable.status })
-    .from(projectsTable);
+  const [projects, tasks] = await Promise.all([
+    db
+      .select({
+        id: projectsTable.id,
+        status: projectsTable.status,
+        dueDate: projectsTable.dueDate,
+      })
+      .from(projectsTable),
+    db
+      .select({
+        projectId: tasksTable.projectId,
+        status: tasksTable.status,
+      })
+      .from(tasksTable),
+  ]);
+
+  // Group tasks by project
+  const projectTasksMap: Record<string, { total: number; incomplete: number }> = {};
+  for (const t of tasks) {
+    if (t.projectId) {
+      if (!projectTasksMap[t.projectId]) {
+        projectTasksMap[t.projectId] = { total: 0, incomplete: 0 };
+      }
+      projectTasksMap[t.projectId].total++;
+      if (t.status !== "COMPLETED") {
+        projectTasksMap[t.projectId].incomplete++;
+      }
+    }
+  }
 
   let onTrack = 0;
   let atRisk = 0;
   let delayed = 0;
   let completed = 0;
 
+  const now = new Date();
+
   for (const p of projects) {
-    const s = p.status ?? "";
-    if (s === "COMPLETED") { completed++; }
-    else if (s === "ON_HOLD" || s === "CANCELLED") { delayed++; }
-    else if (s === "IN_PROGRESS") { onTrack++; }
-    else { atRisk++; }
+    const status = p.status ?? "";
+    if (status === "COMPLETED") {
+      completed++;
+      continue;
+    }
+    if (status === "CANCELLED" || status === "ON_HOLD") {
+      delayed++;
+      continue;
+    }
+
+    // Check if overdue or nearing deadline (e.g. next 7 days) with incomplete tasks
+    const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+    const taskInfo = projectTasksMap[p.id] || { total: 0, incomplete: 0 };
+    const hasIncompleteTasks = taskInfo.incomplete > 0;
+
+    if (dueDate) {
+      const diffTime = dueDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 0) {
+        // Overdue
+        atRisk++;
+      } else if (diffDays <= 7 && hasIncompleteTasks) {
+        // Nearing deadline with incomplete tasks
+        atRisk++;
+      } else {
+        onTrack++;
+      }
+    } else {
+      onTrack++;
+    }
   }
 
   return res.json({ onTrack, atRisk, delayed, completed, total: projects.length });

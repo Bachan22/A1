@@ -72,12 +72,19 @@ router.post("/", requirePermission("users.manage"), asyncHandler(async (req, res
 router.patch("/:id", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   const { id: _id, createdAt: _ts, password: _pw, ...body } = req.body;
 
+  const targetId = req.params.id as string;
+  const currentUserId = (req as any).userId;
+
+  if (targetId === currentUserId && body.isActive === false) {
+    throw createError("You cannot deactivate your own account.", 400);
+  }
+
   if (body.email) {
     const [conflict] = await db
       .select({ id: usersTable.id })
       .from(usersTable)
       .where(eq(usersTable.email, body.email));
-    if (conflict && conflict.id !== (req.params.id as string)) {
+    if (conflict && conflict.id !== targetId) {
       throw createError("Email is already in use by another account", 409);
     }
   }
@@ -90,7 +97,7 @@ router.patch("/:id", requirePermission("users.manage"), asyncHandler(async (req,
   const [row] = await db
     .update(usersTable)
     .set(updateData)
-    .where(eq(usersTable.id, (req.params.id as string)))
+    .where(eq(usersTable.id, targetId))
     .returning(USER_SAFE_COLS);
 
   if (!row) throw createError("User not found", 404);
