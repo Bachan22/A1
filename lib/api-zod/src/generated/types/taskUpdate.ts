@@ -14,4 +14,10 @@ export interface TaskUpdate {
   projectId?: string;
   assigneeId?: string;
   dueDate?: string;
+  approvalStatus?: string | null;
+  requestedBy?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  requestedAt?: string | null;
 }

@@ -6,6 +6,8 @@ import {
   useListAttendance,
   getGetTodayAttendanceQueryKey,
   getListAttendanceQueryKey,
+  useOvertimeCheckIn,
+  useOvertimeCheckOut,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/App";
@@ -20,16 +22,45 @@ import {
 import { Clock, CheckCircle2, AlertTriangle, Users, Download } from "lucide-react";
 import { format } from "date-fns";
 
+function calculateDuration(startStr?: string | null, endStr?: string | null): number {
+  if (!startStr || !endStr) return 0;
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  return Math.max(0, end.getTime() - start.getTime());
+}
+
+function formatDuration(ms: number): string {
+  const totalMin = Math.floor(ms / 60000);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hrs === 0 && mins === 0) return "—";
+  return `${hrs}h ${mins}m`;
+}
+
 function exportAttendanceCSV(records: any[]) {
-  const headers = ["Date", "Employee", "Check In", "Check Out", "Overtime (min)", "Status"];
-  const rows = records.map((r) => [
-    r.date ?? format(new Date(r.checkInAt), "yyyy-MM-dd"),
-    r.userName ?? "",
-    r.checkInAt ? format(new Date(r.checkInAt), "HH:mm") : "",
-    r.checkOutAt ? format(new Date(r.checkOutAt), "HH:mm") : "",
-    r.overtimeMin ?? 0,
-    r.isLate ? "Late" : "On Time",
-  ]);
+  const headers = ["Date", "Employee", "Check In", "Check Out", "Overtime", "Total Hours", "Status"];
+  const rows = records.map((r) => {
+    const normalMs = calculateDuration(r.checkInAt, r.checkOutAt);
+    const otMs = calculateDuration(r.overtimeCheckInAt, r.overtimeCheckOutAt);
+    const totalMs = normalMs + otMs;
+
+    let otStr = "—";
+    if (r.overtimeCheckInAt) {
+      const otStart = format(new Date(r.overtimeCheckInAt), "HH:mm");
+      const otEnd = r.overtimeCheckOutAt ? format(new Date(r.overtimeCheckOutAt), "HH:mm") : "Working";
+      otStr = `${otStart} - ${otEnd}`;
+    }
+
+    return [
+      r.date ?? format(new Date(r.checkInAt), "yyyy-MM-dd"),
+      r.userName ?? "",
+      r.checkInAt ? format(new Date(r.checkInAt), "HH:mm") : "",
+      r.checkOutAt ? format(new Date(r.checkOutAt), "HH:mm") : "",
+      otStr,
+      totalMs > 0 ? formatDuration(totalMs) : "—",
+      r.isLate ? "Late" : "On Time",
+    ];
+  });
   const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -74,10 +105,41 @@ export default function AttendancePage() {
     },
   });
 
-  // Filter attendance history to get checked-in users for today
+  const overtimeCheckInMutation = useOvertimeCheckIn({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Overtime started successfully");
+        qc.invalidateQueries({ queryKey: getGetTodayAttendanceQueryKey() });
+        qc.invalidateQueries({ queryKey: getListAttendanceQueryKey() });
+      },
+      onError: (err: any) => {
+        toast.error(err.message || "Failed to start overtime");
+      },
+    },
+  });
+
+  const overtimeCheckOutMutation = useOvertimeCheckOut({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Overtime completed successfully");
+        qc.invalidateQueries({ queryKey: getGetTodayAttendanceQueryKey() });
+        qc.invalidateQueries({ queryKey: getListAttendanceQueryKey() });
+      },
+      onError: (err: any) => {
+        toast.error(err.message || "Failed to complete overtime");
+      },
+    },
+  });
+
+  // Filter attendance history to get checked-in users for today (regular active check-in OR overtime active check-in)
   const todayDateStr = new Date().toISOString().slice(0, 10);
   const liveBoardUsers = isUserAdminOrManager
-    ? (attendanceHistory ?? []).filter((r) => r.date === todayDateStr && r.checkOutAt === null)
+    ? (attendanceHistory ?? []).filter((r) => {
+        const isToday = r.date === todayDateStr;
+        const activeRegular = r.checkInAt !== null && r.checkOutAt === null;
+        const activeOvertime = r.overtimeCheckInAt !== null && r.overtimeCheckOutAt === null;
+        return isToday && (activeRegular || activeOvertime);
+      })
     : [];
 
   const handleCheckIn = () => {
@@ -86,6 +148,14 @@ export default function AttendancePage() {
 
   const handleCheckOut = () => {
     checkOutMutation.mutate();
+  };
+
+  const handleOvertimeCheckIn = () => {
+    overtimeCheckInMutation.mutate();
+  };
+
+  const handleOvertimeCheckOut = () => {
+    overtimeCheckOutMutation.mutate();
   };
 
   return (
@@ -138,26 +208,72 @@ export default function AttendancePage() {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Regular Shift Details */}
                 <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-semibold text-sm">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    <span>Checked In</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-semibold text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <span>Regular Shift</span>
+                    </div>
+                    {todayStatus.checkOutAt ? (
+                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 text-[10px]">
+                        Completed
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] animate-pulse">
+                        Active
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-xs text-emerald-700 dark:text-emerald-400 space-y-1">
                     <p>
-                      <strong>Time:</strong>{" "}
+                      <strong>Check In:</strong>{" "}
                       {todayStatus.checkInAt ? format(new Date(todayStatus.checkInAt), "p") : "—"}
                     </p>
                     {todayStatus.checkOutAt && (
                       <p>
-                        <strong>Checked Out:</strong>{" "}
+                        <strong>Check Out:</strong>{" "}
                         {format(new Date(todayStatus.checkOutAt), "p")}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {!todayStatus.checkOutAt && (
+                {/* Overtime Shift Details */}
+                {todayStatus.overtimeCheckInAt && (
+                  <div className="rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-violet-800 dark:text-violet-300 font-semibold text-sm">
+                        <span className="h-2 w-2 rounded-full bg-violet-500 animate-pulse" />
+                        <span>Overtime Shift</span>
+                      </div>
+                      {todayStatus.overtimeCheckOutAt ? (
+                        <Badge variant="secondary" className="bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300 text-[10px]">
+                          Completed
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-violet-500 text-white dark:bg-violet-600 text-[10px] animate-pulse">
+                          🟣 Overtime
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-violet-700 dark:text-violet-400 space-y-1">
+                      <p>
+                        <strong>Overtime Check In:</strong>{" "}
+                        {format(new Date(todayStatus.overtimeCheckInAt), "p")}
+                      </p>
+                      {todayStatus.overtimeCheckOutAt && (
+                        <p>
+                          <strong>Overtime Check Out:</strong>{" "}
+                          {format(new Date(todayStatus.overtimeCheckOutAt), "p")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Action Button */}
+                {!todayStatus.checkOutAt ? (
                   <Button
                     variant="outline"
                     onClick={handleCheckOut}
@@ -167,6 +283,35 @@ export default function AttendancePage() {
                   >
                     {checkOutMutation.isPending ? "Checking out..." : "Check Out"}
                   </Button>
+                ) : !todayStatus.overtimeCheckInAt ? (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <p className="text-xs text-muted-foreground text-center">
+                      Your regular shift is completed. Do you want to start overtime?
+                    </p>
+                    <Button
+                      variant="default"
+                      onClick={handleOvertimeCheckIn}
+                      disabled={overtimeCheckInMutation.isPending}
+                      className="w-full btn-micro-anim bg-violet-600 hover:bg-violet-700 text-white dark:bg-violet-700 dark:hover:bg-violet-600"
+                      data-testid="overtime-check-in-btn"
+                    >
+                      {overtimeCheckInMutation.isPending ? "Starting Overtime..." : "Overtime Check In"}
+                    </Button>
+                  </div>
+                ) : !todayStatus.overtimeCheckOutAt ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleOvertimeCheckOut}
+                    disabled={overtimeCheckOutMutation.isPending}
+                    className="w-full btn-micro-anim border-violet-500 text-violet-400 hover:bg-violet-950/20 dark:border-violet-600 dark:text-violet-300 dark:hover:bg-violet-900/20"
+                    data-testid="overtime-check-out-btn"
+                  >
+                    {overtimeCheckOutMutation.isPending ? "Ending Overtime..." : "Overtime Check Out"}
+                  </Button>
+                ) : (
+                  <div className="pt-2 text-center text-xs text-muted-foreground border-t border-border">
+                    🎉 Attendance is complete for today!
+                  </div>
                 )}
               </div>
             )}
@@ -193,16 +338,23 @@ export default function AttendancePage() {
                 <p className="text-sm text-muted-foreground py-2">No team members checked in currently.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {liveBoardUsers.map((r) => (
-                    <Badge key={r.id} variant="secondary" className="flex items-center gap-1.5 py-1 px-2.5">
-                      <span className="font-medium">{r.userName ?? "Unknown"}</span>
-                      {r.isLate && (
-                        <Badge variant="destructive" className="text-[9px] px-1 py-0 scale-95 origin-center font-bold">
-                          LATE
-                        </Badge>
-                      )}
-                    </Badge>
-                  ))}
+                  {liveBoardUsers.map((r) => {
+                    const isOvertime = r.overtimeCheckInAt !== null && r.overtimeCheckOutAt === null;
+                    return (
+                      <Badge key={r.id} variant="secondary" className="flex items-center gap-1.5 py-1 px-2.5">
+                        <span className="font-medium">{r.userName ?? "Unknown"}</span>
+                        {isOvertime ? (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-violet-300 text-violet-400 bg-violet-950/20 font-bold dark:border-violet-600 dark:text-violet-300">
+                            🟣 Overtime
+                          </Badge>
+                        ) : r.isLate ? (
+                          <Badge variant="destructive" className="text-[9px] px-1 py-0 scale-95 origin-center font-bold">
+                            LATE
+                          </Badge>
+                        ) : null}
+                      </Badge>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -232,38 +384,54 @@ export default function AttendancePage() {
                   <TableHead>Check In</TableHead>
                   <TableHead>Check Out</TableHead>
                   <TableHead>Overtime</TableHead>
+                  <TableHead>Total Hours</TableHead>
                   <TableHead className="text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(attendanceHistory ?? []).map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">
-                      {format(new Date(r.checkInAt), "PP")}
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(r.checkInAt), "p")}
-                    </TableCell>
-                    <TableCell>
-                      {r.checkOutAt ? format(new Date(r.checkOutAt), "p") : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {r.overtimeMin && r.overtimeMin > 0 ? `${r.overtimeMin} min` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {r.isLate ? (
-                        <Badge variant="outline" className="border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-950/20">
-                          <AlertTriangle className="h-3 w-3 mr-1 shrink-0" />
-                          Late
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20">
-                          On time
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(attendanceHistory ?? []).map((r) => {
+                  const normalMs = calculateDuration(r.checkInAt, r.checkOutAt);
+                  const otMs = calculateDuration(r.overtimeCheckInAt, r.overtimeCheckOutAt);
+                  const totalMs = normalMs + otMs;
+
+                  return (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">
+                        {format(new Date(r.checkInAt), "dd MMM yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(r.checkInAt), "HH:mm")}
+                      </TableCell>
+                      <TableCell>
+                        {r.checkOutAt ? format(new Date(r.checkOutAt), "HH:mm") : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {r.overtimeCheckInAt ? (
+                          <span className="text-violet-400 dark:text-violet-300 font-medium">
+                            {format(new Date(r.overtimeCheckInAt), "HH:mm")} – {r.overtimeCheckOutAt ? format(new Date(r.overtimeCheckOutAt), "HH:mm") : "Working"}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {totalMs > 0 ? formatDuration(totalMs) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400">
+                            Present
+                          </Badge>
+                          {r.isLate && (
+                            <span className="text-[10px] text-rose-500 font-semibold flex items-center gap-0.5">
+                              <AlertTriangle className="h-2.5 w-2.5" /> Late
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

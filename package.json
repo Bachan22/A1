@@ -10,7 +10,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspace=@workspace/api-zod && npm run build --workspace=@workspace/db && npm run build --workspace=@workspace/agency-os && npm run build --workspace=@workspace/api-server",
-    "dev": "npm run build --workspace=@workspace/api-zod && npm run build --workspace=@workspace/db && npm run build --workspace=@workspace/agency-os && SERVE_STATIC=true PORT=3000 npm run dev --workspace=@workspace/api-server"
+    "dev": "npm run build --workspace=@workspace/api-zod && npm run build --workspace=@workspace/db && npm run build --workspace=@workspace/agency-os && SERVE_STATIC=true PORT=3000 npm run dev --workspace=@workspace/api-server",
+    "lint": "npm run build"
   },
   "private": true,
   "devDependencies": {

@@ -29,11 +29,13 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  DRAFT:    { label: "Draft",    className: "bg-slate-100 text-slate-600" },
-  SENT:     { label: "Sent",     className: "bg-blue-100 text-blue-700" },
-  APPROVED: { label: "Approved", className: "bg-emerald-100 text-emerald-700" },
-  RECEIVED: { label: "Received", className: "bg-violet-100 text-violet-700" },
-  CANCELLED:{ label: "Cancelled",className: "bg-rose-100 text-rose-700" },
+  DRAFT:              { label: "Draft",              className: "bg-slate-100 text-slate-600 dark:bg-slate-900/50 dark:text-slate-400" },
+  SENT:               { label: "Sent",               className: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
+  APPROVED:           { label: "Approved",           className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" },
+  ORDERED:            { label: "Ordered",            className: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400" },
+  PARTIALLY_RECEIVED: { label: "Partially Received", className: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" },
+  RECEIVED:           { label: "Received",           className: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400" },
+  CANCELLED:          { label: "Cancelled",          className: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400" },
 };
 
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -84,6 +86,17 @@ export default function PurchaseOrdersPage() {
         setView("detail");
       },
       onError: () => toast.error("Failed to update PO"),
+    },
+  });
+
+  const updateStatusMutation = useUpdatePurchaseOrder({
+    mutation: {
+      onSuccess: (data) => {
+        toast.success("Purchase Order status updated");
+        qc.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        setSelected((prev) => prev && prev.id === data.id ? (data as PurchaseOrder) : prev);
+      },
+      onError: () => toast.error("Failed to update status"),
     },
   });
 
@@ -159,7 +172,25 @@ export default function PurchaseOrdersPage() {
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setView("list")}>← Back</Button>
           <h1 className="text-xl font-bold font-heading">{selected.number ?? "Purchase Order"}</h1>
-          <Badge className={cn("text-xs border", sc.className)}>{sc.label}</Badge>
+          <Select
+            value={selected.status ?? "DRAFT"}
+            onValueChange={(v) => {
+              if (v) {
+                updateStatusMutation.mutate({ id: selected.id, data: { status: v } });
+              }
+            }}
+          >
+            <SelectTrigger className="h-7 text-xs w-40 border-0 bg-transparent p-0 shadow-none focus:ring-0">
+              <Badge className={cn("text-xs border cursor-pointer", sc.className)}>
+                {sc.label}
+              </Badge>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                <SelectItem key={k} value={k} className="text-xs">{v.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="ml-auto flex gap-2">
             <Button variant="outline" size="sm" onClick={() => openEdit(selected)}>
               <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
@@ -466,8 +497,26 @@ export default function PurchaseOrdersPage() {
                     <TableCell>{po.orderDate ? format(new Date(po.orderDate), "dd MMM yyyy") : "—"}</TableCell>
                     <TableCell>{po.deliveryDate ? format(new Date(po.deliveryDate), "dd MMM yyyy") : "—"}</TableCell>
                     <TableCell className="text-right font-medium">₹{(po.total ?? 0).toLocaleString("en-IN")}</TableCell>
-                    <TableCell>
-                      <Badge className={cn("text-xs border", sc.className)}>{sc.label}</Badge>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Select
+                        value={po.status ?? "DRAFT"}
+                        onValueChange={(v) => {
+                          if (v) {
+                            updateStatusMutation.mutate({ id: po.id, data: { status: v } });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-36 border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                          <Badge className={cn("text-xs border cursor-pointer", sc.className)}>
+                            {sc.label}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                            <SelectItem key={k} value={k} className="text-xs">{v.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setSelected(po); setView("detail"); }}>

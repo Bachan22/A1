@@ -84,6 +84,8 @@ export default function DashboardPage() {
   const [chartRange, setChartRange] = useState<string>("6m");
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useGetDashboardStats();
+  const isEmployee = user?.systemRole !== "SUPER_ADMIN";
+
   const { data: revenueChart, isLoading: chartLoading } = useQuery<{ month: string; amount: number }[]>({
     queryKey: ["revenue-chart", chartRange],
     queryFn: async () => {
@@ -93,7 +95,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: !!token,
+    enabled: !!token && !isEmployee,
   });
 
   // Content posts for current week (fetch both bounding months to handle month boundaries)
@@ -150,6 +152,22 @@ export default function DashboardPage() {
           <Skeleton className="h-72" />
         </div>
       </div>
+    );
+  }
+
+  if (isEmployee || stats.isEmployee) {
+    return (
+      <EmployeeDashboard
+        stats={stats}
+        refetchStats={refetchStats}
+        greeting={greeting()}
+        todayStr={todayStr}
+        navigate={navigate}
+        weekDays={weekDays}
+        postsByDay={postsByDay}
+        allWeekPosts={allWeekPosts}
+        PLATFORM_DOT={PLATFORM_DOT}
+      />
     );
   }
 
@@ -759,6 +777,412 @@ export default function DashboardPage() {
                         {format(day, "EEE")}
                       </p>
                       <p className={cn("text-sm font-bold font-heading leading-none", isCurrentDay ? "text-primary" : "text-foreground")}>
+                        {format(day, "d")}
+                      </p>
+                      {dayPosts.length > 0 ? (
+                        <div className="flex flex-wrap gap-0.5 justify-center mt-1">
+                          {dayPosts.slice(0, 3).map((p, i) => (
+                            <div key={i} className={cn("h-1.5 w-1.5 rounded-full", PLATFORM_DOT[p.platform] ?? "bg-slate-400")} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="h-1.5" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeDashboard({
+  stats,
+  refetchStats,
+  greeting,
+  todayStr,
+  navigate,
+  weekDays,
+  postsByDay,
+  PLATFORM_DOT,
+}: {
+  stats: any;
+  refetchStats: () => void;
+  greeting: string;
+  todayStr: string;
+  navigate: (path: string) => void;
+  weekDays: Date[];
+  postsByDay: Record<string, { platform: string }[]>;
+  allWeekPosts: any[];
+  PLATFORM_DOT: Record<string, string>;
+}) {
+  return (
+    <div className="p-6 space-y-6 animated-fade-in text-foreground">
+      {/* ── Section 1: Welcome Banner ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold font-heading">
+            {greeting}, {stats.employeeName?.split(" ")[0]} 👋
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{todayStr}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetchStats()} className="h-8 gap-1.5 text-xs">
+            <RefreshCw className="h-3 w-3" /> Refresh
+          </Button>
+          <Badge variant="outline" className="text-[11px] font-semibold py-1 px-2.5 gap-1.5 bg-primary/5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            My Productive Hub
+          </Badge>
+        </div>
+      </div>
+
+      {/* ── Section 2: My Work Summary ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Assigned Tasks</span>
+          <div>
+            <span className="text-2xl font-bold text-primary font-heading">{stats.myWorkSummary?.assignedTasks ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Active scope</p>
+          </div>
+        </div>
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-amber-500">Due Today</span>
+          <div>
+            <span className="text-2xl font-bold text-amber-500 font-heading">{stats.myWorkSummary?.tasksDueToday ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Priorities today</p>
+          </div>
+        </div>
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-rose-500">Overdue</span>
+          <div>
+            <span className="text-2xl font-bold text-rose-500 font-heading">{stats.myWorkSummary?.overdueTasks ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Needs action</p>
+          </div>
+        </div>
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Projects</span>
+          <div>
+            <span className="text-2xl font-bold text-indigo-400 font-heading">{stats.myWorkSummary?.projectsAssignedToMe ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">My workspace</p>
+          </div>
+        </div>
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pending Requests</span>
+          <div>
+            <span className="text-2xl font-bold text-violet-400 font-heading">{stats.myWorkSummary?.pendingTaskRequests ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Awaiting review</p>
+          </div>
+        </div>
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Approved Req</span>
+          <div>
+            <span className="text-2xl font-bold text-emerald-500 font-heading">{stats.myWorkSummary?.approvedRequests ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Successfully added</p>
+          </div>
+        </div>
+        <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-between h-[100px] scale-hover transition-all duration-200">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Rejected Req</span>
+          <div>
+            <span className="text-2xl font-bold text-rose-400 font-heading">{stats.myWorkSummary?.rejectedRequests ?? 0}</span>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Adjustments needed</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 3: My Projects & Assigned Clients ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* My Projects */}
+        <Card className="xl:col-span-2 bg-card">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FolderOpen className="h-4 w-4 text-primary" /> My Active Projects
+            </CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => navigate("/projects")}>
+              Go to Projects <ArrowRight className="h-3 w-3" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {stats.myProjects?.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No projects currently assigned to you</p>
+            ) : (
+              <div className="space-y-4">
+                {stats.myProjects?.map((project: any) => (
+                  <div key={project.id} className="p-3.5 rounded-lg border border-border bg-muted/10 hover:bg-muted/20 transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="min-w-0">
+                        <span className="text-xs font-semibold text-foreground truncate block">{project.name}</span>
+                        <div className="flex gap-2 items-center mt-1">
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 uppercase">{project.priority} Priority</Badge>
+                          <span className="text-[10px] text-muted-foreground">Due: {project.dueDate ? format(new Date(project.dueDate), "dd MMM yyyy") : "N/A"}</span>
+                        </div>
+                      </div>
+                      <Badge className={cn("text-[10px] uppercase", project.status === "COMPLETED" ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary")}>
+                        {project.status?.replace("_", " ")}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-muted h-1.5 rounded-full overflow-hidden">
+                        <div style={{ width: `${project.completion}%` }} className="bg-indigo-500 h-full rounded-full transition-all duration-300" />
+                      </div>
+                      <span className="text-[10px] font-bold shrink-0">{project.completion}% Done</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Assigned Clients */}
+        <Card className="bg-card flex flex-col justify-between">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" /> My Assigned Clients
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col justify-between gap-4">
+            {stats.clientInfo?.count === 0 ? (
+              <div className="text-center py-8 text-muted-foreground my-auto">
+                <Users className="h-10 w-10 mx-auto mb-2 opacity-20 text-primary" />
+                <p className="text-xs font-semibold">No assigned clients</p>
+                <p className="text-[10px] opacity-75 mt-0.5">Assigned via project memberships</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                {stats.clientInfo?.names?.map((name: string, index: number) => (
+                  <div key={index} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border bg-muted/20">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-xs font-bold text-foreground/90">{name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pt-3 border-t border-border/50 text-center">
+              <p className="text-[10px] text-muted-foreground">
+                Currently managing <span className="text-foreground font-bold">{stats.clientInfo?.count ?? 0}</span> active client{stats.clientInfo?.count !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Row 4: My Active Tasks ── */}
+      <Card className="bg-card">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CheckSquare className="h-4 w-4 text-primary" /> My Tasks
+          </CardTitle>
+          <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => navigate("/tasks")}>
+            Manage Tasks <ArrowRight className="h-3 w-3" />
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {stats.myTasks?.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No active tasks assigned to you</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {stats.myTasks?.map((task: any) => (
+                <div key={task.id} className="p-3.5 rounded-lg border border-border bg-muted/10 hover:bg-muted/20 transition-all flex flex-col justify-between gap-3 cursor-pointer" onClick={() => navigate("/tasks")}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-foreground truncate block">{task.title}</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">Project: {task.projectName || "None"}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 uppercase shrink-0">
+                      {task.priority}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-muted-foreground font-semibold">Due: {task.dueDate ? format(new Date(task.dueDate), "dd MMM yyyy") : "N/A"}</span>
+                    <Badge className={cn("text-[9px] capitalize px-1.5 py-0.5", task.status === "COMPLETED" ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary")}>
+                      {task.status?.replace("_", " ").toLowerCase()}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Row 5: Upcoming Deadlines & My Task Requests ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Upcoming Deadlines */}
+        <Card className="bg-card">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" /> Upcoming Deadlines
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">Chronological priorities</span>
+          </CardHeader>
+          <CardContent>
+            {stats.upcomingDeadlines?.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground border border-dashed border-border rounded-xl bg-card/10">
+                <Clock className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm font-medium">All quiet this month</p>
+                <p className="text-xs opacity-75 mt-0.5">No upcoming deadlines or schedules</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                {stats.upcomingDeadlines?.map((item: any) => {
+                  const dateLabel = format(new Date(item.date), "dd MMM yyyy");
+                  return (
+                    <div key={item.id} className="flex items-center gap-3.5 p-3 rounded-lg border border-border bg-muted/10 hover:bg-muted/30 transition-all justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-base">
+                          {item.type === "project" ? "💼" : item.type === "task" ? "📋" : "🌴"}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">{item.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase">
+                              {item.type}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground font-semibold">
+                              {item.extraInfo}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={cn("text-xs font-bold", item.overdue ? "text-rose-500 font-black animate-pulse" : "text-foreground")}>
+                          {dateLabel}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground mt-0.5">
+                          {item.overdue ? "Immediate Action Required" : "Upcoming deadline"}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* My Task Requests */}
+        <Card className="bg-card">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileCheck className="h-4 w-4 text-primary" /> My Task Requests
+            </CardTitle>
+            <Button onClick={() => navigate("/tasks")} variant="outline" size="sm" className="h-7 text-xs gap-1">
+              <Plus className="h-3 w-3" /> Request Task
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {stats.myTaskRequests?.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground border border-dashed border-border rounded-xl bg-card/10">
+                <FileCheck className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm font-medium">No task requests</p>
+                <p className="text-xs opacity-75 mt-0.5">You can submit custom task requests to admins</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                {stats.myTaskRequests?.map((item: any) => {
+                  const statusColors: Record<string, string> = {
+                    PENDING: "bg-amber-500/10 text-amber-500",
+                    APPROVED: "bg-emerald-500/10 text-emerald-500",
+                    REJECTED: "bg-rose-500/10 text-rose-500",
+                  };
+                  return (
+                    <div key={item.id} className="p-3 rounded-lg border border-border bg-muted/10 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-foreground truncate block">{item.title}</span>
+                        <Badge className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5", statusColors[item.approvalStatus] ?? "bg-slate-500/10 text-slate-500")}>
+                          {item.approvalStatus}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                        <span>Project: {item.projectName || "None"}</span>
+                        <span>{item.createdAt ? format(new Date(item.createdAt), "dd MMM yyyy") : ""}</span>
+                      </div>
+                      {item.rejectionReason && item.approvalStatus === "REJECTED" && (
+                        <div className="p-2.5 rounded bg-rose-950/20 border border-rose-500/20 text-[10px] text-rose-400 font-medium">
+                          <span className="font-bold">Rejection reason:</span> {item.rejectionReason}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Row 6: Recent Activity & Content Calendar ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Recent Activity */}
+        <Card className="bg-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" /> My Recent Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {stats.recentActivity?.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No recent activities found</p>
+            ) : (
+              <div className="space-y-3.5 max-h-[280px] overflow-y-auto pr-1">
+                {stats.recentActivity?.map((activity: any) => (
+                  <div key={activity.id} className="flex gap-3 items-start text-xs border-b border-border/30 pb-3 last:border-0 last:pb-0">
+                    <span className="text-base shrink-0">
+                      {activity.type === "project" ? "💼" : activity.type === "leave" ? "🌴" : "📋"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-foreground/90 font-medium leading-relaxed">{activity.message}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(activity.createdAt), "dd MMM yyyy, hh:mm a")}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Content Calendar Week Strip */}
+        <Card className="bg-card">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Flame className="h-4 w-4 text-orange-500 animate-pulse" /> Week's Social Content
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => navigate("/content")}>
+                Calendar <ArrowRight className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {stats.myProjects?.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground bg-card/20 rounded-xl border border-dashed border-border">
+                <Flame className="h-8 w-8 mb-2 opacity-30 text-orange-500" />
+                <p className="text-sm font-medium">No projects found.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-7 gap-1">
+                {weekDays.map((day) => {
+                  const dayKey = format(day, "yyyy-MM-dd");
+                  const dayPosts = postsByDay[dayKey] ?? [];
+                  const isCurrentDay = isToday(day);
+                  return (
+                    <div
+                      key={dayKey}
+                      onClick={() => navigate("/content")}
+                      className={cn(
+                        "flex flex-col items-center gap-1 p-1.5 rounded-lg border cursor-pointer transition-colors hover:border-primary/40",
+                        isCurrentDay ? "bg-primary/5 border-primary/30" : "border-border bg-card/50"
+                      )}
+                    >
+                      <p className={cn("text-[9px] font-semibold uppercase", isCurrentDay ? "text-primary font-black" : "text-muted-foreground")}>
+                        {format(day, "EEE")}
+                      </p>
+                      <p className="text-sm font-bold font-heading leading-none text-foreground">
                         {format(day, "d")}
                       </p>
                       {dayPosts.length > 0 ? (

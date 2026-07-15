@@ -17,7 +17,7 @@ function sanitizePurchaseOrder(body: any, isUpdate = false) {
     textDates: ["orderDate", "deliveryDate"],
     numbers: ["subtotal", "taxAmount", "total"],
     enums: {
-      status: ["DRAFT", "SENT", "DELIVERED", "CANCELLED"],
+      status: ["DRAFT", "SENT", "APPROVED", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"],
     }
   });
 }

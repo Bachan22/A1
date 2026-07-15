@@ -348,7 +348,17 @@ export const ListTasksResponseItem = zod.object({
   "assigneeId": zod.string().nullish(),
   "assigneeName": zod.string().nullish(),
   "dueDate": zod.string().nullish(),
-  "description": zod.string().nullish()
+  "description": zod.string().nullish(),
+  "approvalStatus": zod.string().nullish(),
+  "requestedBy": zod.string().nullish(),
+  "requestedByName": zod.string().nullish(),
+  "requestedByEmail": zod.string().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "approvedByName": zod.string().nullish(),
+  "approvedByEmail": zod.string().nullish(),
+  "approvedAt": zod.string().nullish(),
+  "rejectionReason": zod.string().nullish(),
+  "requestedAt": zod.string().nullish()
 })
 export const ListTasksResponse = zod.array(ListTasksResponseItem)
 
@@ -363,7 +373,13 @@ export const CreateTaskBody = zod.object({
   "projectId": zod.string().nullish(),
   "assigneeId": zod.string().nullish(),
   "dueDate": zod.string().nullish(),
-  "description": zod.string().nullish()
+  "description": zod.string().nullish(),
+  "approvalStatus": zod.string().nullish(),
+  "requestedBy": zod.string().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "approvedAt": zod.string().nullish(),
+  "rejectionReason": zod.string().nullish(),
+  "requestedAt": zod.string().nullish()
 })
 
 
@@ -375,13 +391,19 @@ export const UpdateTaskParams = zod.object({
 })
 
 export const UpdateTaskBody = zod.object({
-  "title": zod.string(),
+  "title": zod.string().optional(),
   "status": zod.string().nullish(),
   "priority": zod.string().nullish(),
   "projectId": zod.string().nullish(),
   "assigneeId": zod.string().nullish(),
   "dueDate": zod.string().nullish(),
-  "description": zod.string().nullish()
+  "description": zod.string().nullish(),
+  "approvalStatus": zod.string().nullish(),
+  "requestedBy": zod.string().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "approvedAt": zod.string().nullish(),
+  "rejectionReason": zod.string().nullish(),
+  "requestedAt": zod.string().nullish()
 })
 
 export const UpdateTaskResponse = zod.object({
@@ -394,7 +416,17 @@ export const UpdateTaskResponse = zod.object({
   "assigneeId": zod.string().nullish(),
   "assigneeName": zod.string().nullish(),
   "dueDate": zod.string().nullish(),
-  "description": zod.string().nullish()
+  "description": zod.string().nullish(),
+  "approvalStatus": zod.string().nullish(),
+  "requestedBy": zod.string().nullish(),
+  "requestedByName": zod.string().nullish(),
+  "requestedByEmail": zod.string().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "approvedByName": zod.string().nullish(),
+  "approvedByEmail": zod.string().nullish(),
+  "approvedAt": zod.string().nullish(),
+  "rejectionReason": zod.string().nullish(),
+  "requestedAt": zod.string().nullish()
 })
 
 

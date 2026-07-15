@@ -11,6 +11,8 @@ import { errorHandler } from "./middleware/errorHandler";
 
 const app: Express = express();
 
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
@@ -44,6 +46,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
+  validate: { trustProxy: false },
 });
 
 app.use("/public", publicRouter);

@@ -6,12 +6,338 @@ import {
 } from "@workspace/db/schema";
 import { eq, gte, sql, and, lte } from "drizzle-orm";
 import { asyncHandler } from "../lib/asyncHandler";
-import { requirePermission } from "../middleware/auth";
+import { requirePermission, requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/stats", requirePermission("reports.view"), asyncHandler(async (req, res) => {
+router.get("/stats", requireAuth, asyncHandler(async (req, res) => {
+  const userId = (req as any).userId;
+  const [user] = await db
+    .select({
+      name: usersTable.name,
+      systemRole: usersTable.systemRole,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
   const now = new Date();
+
+  if (user?.systemRole !== "SUPER_ADMIN") {
+    // 1. Employee Work Summary
+    const employeeTasks = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        status: tasksTable.status,
+        priority: tasksTable.priority,
+        dueDate: tasksTable.dueDate,
+        projectId: tasksTable.projectId,
+        approvalStatus: tasksTable.approvalStatus,
+        requestedBy: tasksTable.requestedBy,
+        rejectionReason: tasksTable.rejectionReason,
+        createdAt: tasksTable.createdAt,
+        updatedAt: tasksTable.updatedAt,
+        approvedAt: tasksTable.approvedAt,
+      })
+      .from(tasksTable)
+      .where(eq(tasksTable.assigneeId, userId));
+
+    const employeeTaskRequests = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        status: tasksTable.status,
+        priority: tasksTable.priority,
+        dueDate: tasksTable.dueDate,
+        projectId: tasksTable.projectId,
+        approvalStatus: tasksTable.approvalStatus,
+        requestedBy: tasksTable.requestedBy,
+        rejectionReason: tasksTable.rejectionReason,
+        createdAt: tasksTable.createdAt,
+        updatedAt: tasksTable.updatedAt,
+        requestedAt: tasksTable.requestedAt,
+        approvedAt: tasksTable.approvedAt,
+      })
+      .from(tasksTable)
+      .where(eq(tasksTable.requestedBy, userId));
+
+    const allProjects = await db
+      .select({
+        id: projectsTable.id,
+        name: projectsTable.name,
+        status: projectsTable.status,
+        priority: projectsTable.priority,
+        dueDate: projectsTable.dueDate,
+        createdBy: projectsTable.createdBy,
+        createdAt: projectsTable.createdAt,
+      })
+      .from(projectsTable);
+
+    const assignedProjectIds = Array.from(new Set(employeeTasks.map((t) => t.projectId).filter(Boolean))) as string[];
+    const myProjects = allProjects.filter((p) => p.createdBy === userId || assignedProjectIds.includes(p.id));
+
+    const allProjectTasks = await db
+      .select({
+        id: tasksTable.id,
+        status: tasksTable.status,
+        projectId: tasksTable.projectId,
+      })
+      .from(tasksTable)
+      .where(sql`${tasksTable.projectId} is not null`);
+
+    const myProjectsWithCompletion = myProjects.map((p) => {
+      const projectTasks = allProjectTasks.filter((t) => t.projectId === p.id);
+      const totalTasks = projectTasks.length;
+      const completedTasks = projectTasks.filter((t) => t.status === "COMPLETED").length;
+      const completion = p.status === "COMPLETED" ? 100 : totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      return {
+        id: p.id,
+        name: p.name,
+        status: p.status,
+        priority: p.priority,
+        dueDate: p.dueDate ? p.dueDate.toISOString() : null,
+        completion,
+      };
+    });
+
+    const totalAssignedTasks = employeeTasks.length;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const tasksDueTodayCount = employeeTasks.filter((t) => {
+      if (t.status === "COMPLETED" || !t.dueDate) return false;
+      const d = new Date(t.dueDate);
+      return d >= todayStart && d <= todayEnd;
+    }).length;
+
+    const overdueTasksCount = employeeTasks.filter((t) => {
+      if (t.status === "COMPLETED" || !t.dueDate) return false;
+      return new Date(t.dueDate) < now;
+    }).length;
+
+    const projectsAssignedToMeCount = myProjects.length;
+
+    const pendingTaskRequestsCount = employeeTaskRequests.filter(
+      (t) => t.approvalStatus === "PENDING"
+    ).length;
+
+    const approvedRequestsCount = employeeTaskRequests.filter(
+      (t) => t.approvalStatus === "APPROVED"
+    ).length;
+
+    const rejectedRequestsCount = employeeTaskRequests.filter(
+      (t) => t.approvalStatus === "REJECTED"
+    ).length;
+
+    // Upcoming Deadlines
+    const upcomingDeadlines: any[] = [];
+    for (const t of employeeTasks) {
+      if (t.dueDate && t.status !== "COMPLETED") {
+        upcomingDeadlines.push({
+          id: `task-${t.id}`,
+          type: "task",
+          title: t.title,
+          date: t.dueDate.toISOString(),
+          status: t.status,
+          overdue: new Date(t.dueDate) < now,
+          extraInfo: `Priority: ${t.priority}`,
+        });
+      }
+    }
+
+    for (const p of myProjectsWithCompletion) {
+      if (p.dueDate && p.status !== "COMPLETED") {
+        upcomingDeadlines.push({
+          id: `project-${p.id}`,
+          type: "project",
+          title: p.name,
+          date: p.dueDate,
+          status: p.status,
+          overdue: new Date(p.dueDate) < now,
+          extraInfo: `Status: ${p.status}`,
+        });
+      }
+    }
+
+    const myLeaves = await db
+      .select()
+      .from(leaveRequestsTable)
+      .where(eq(leaveRequestsTable.userId, userId));
+
+    for (const lv of myLeaves) {
+      if (lv.startDate) {
+        const start = new Date(lv.startDate);
+        upcomingDeadlines.push({
+          id: `leave-${lv.id}`,
+          type: "leave",
+          title: `Personal Leave Request`,
+          date: start.toISOString(),
+          status: lv.status,
+          overdue: start < now && lv.status === "PENDING",
+          extraInfo: `${lv.type} (${lv.status})`,
+        });
+      }
+    }
+
+    upcomingDeadlines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // My Tasks
+    const myTasksList = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        status: tasksTable.status,
+        priority: tasksTable.priority,
+        dueDate: tasksTable.dueDate,
+        projectId: tasksTable.projectId,
+        projectName: projectsTable.name,
+      })
+      .from(tasksTable)
+      .leftJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
+      .where(and(eq(tasksTable.assigneeId, userId), eq(tasksTable.approvalStatus, "APPROVED")));
+
+    // My Task Requests (Section 6)
+    const myTaskRequestsList = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        approvalStatus: tasksTable.approvalStatus,
+        rejectionReason: tasksTable.rejectionReason,
+        createdAt: tasksTable.createdAt,
+        projectName: projectsTable.name,
+      })
+      .from(tasksTable)
+      .leftJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
+      .where(and(eq(tasksTable.requestedBy, userId), sql`${tasksTable.approvalStatus} is not null`));
+
+    // Recent Activity (Section 7)
+    const activities: any[] = [];
+    for (const t of employeeTasks) {
+      const tCreatedAt = t.createdAt ? new Date(t.createdAt) : new Date();
+      const tUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : new Date();
+
+      if (t.approvalStatus === "APPROVED") {
+        const approvedDate = t.approvedAt ? new Date(t.approvedAt) : tCreatedAt;
+        activities.push({
+          id: `task-assigned-${t.id}`,
+          type: "task",
+          message: `Task assigned: "${t.title}"`,
+          createdAt: approvedDate.toISOString(),
+        });
+
+        if (t.status === "IN_PROGRESS" || t.status === "COMPLETED") {
+          activities.push({
+            id: `task-status-${t.id}`,
+            type: "task",
+            message: `Task status updated to ${t.status.replace("_", " ")}: "${t.title}"`,
+            createdAt: tUpdatedAt.toISOString(),
+          });
+        }
+      }
+    }
+
+    for (const tr of employeeTaskRequests) {
+      const trCreatedAt = tr.requestedAt ? new Date(tr.requestedAt) : (tr.createdAt ? new Date(tr.createdAt) : new Date());
+      const trUpdatedAt = tr.updatedAt ? new Date(tr.updatedAt) : new Date();
+
+      activities.push({
+        id: `task-req-submitted-${tr.id}`,
+        type: "task",
+        message: `Submitted task request: "${tr.title}"`,
+        createdAt: trCreatedAt.toISOString(),
+      });
+
+      if (tr.approvalStatus === "APPROVED") {
+        const approvedDate = tr.approvedAt ? new Date(tr.approvedAt) : trUpdatedAt;
+        activities.push({
+          id: `task-req-approved-${tr.id}`,
+          type: "task",
+          message: `Task request approved: "${tr.title}"`,
+          createdAt: approvedDate.toISOString(),
+        });
+      } else if (tr.approvalStatus === "REJECTED") {
+        activities.push({
+          id: `task-req-rejected-${tr.id}`,
+          type: "task",
+          message: `Task request rejected: "${tr.title}"`,
+          createdAt: trUpdatedAt.toISOString(),
+        });
+      }
+    }
+
+    for (const lv of myLeaves) {
+      const lvCreatedAt = lv.createdAt ? new Date(lv.createdAt) : new Date();
+      activities.push({
+        id: `leave-submitted-${lv.id}`,
+        type: "leave",
+        message: `Leave request submitted: ${lv.type} (${lv.startDate} to ${lv.endDate})`,
+        createdAt: lvCreatedAt.toISOString(),
+      });
+    }
+
+    for (const p of myProjects) {
+      const pCreatedAt = p.createdAt ? new Date(p.createdAt) : new Date();
+      activities.push({
+        id: `project-assigned-${p.id}`,
+        type: "project",
+        message: `Project assigned: "${p.name}"`,
+        createdAt: pCreatedAt.toISOString(),
+      });
+    }
+
+    activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const assignedClients = await db
+      .select({
+        id: clientsTable.id,
+        companyName: clientsTable.companyName,
+      })
+      .from(clientsTable);
+
+    const myClientIds = Array.from(new Set(myProjects.map((p) => p.clientId).filter(Boolean)));
+    const myClients = assignedClients.filter((c) => myClientIds.includes(c.id));
+
+    return res.json({
+      isEmployee: true,
+      employeeName: user.name,
+      myWorkSummary: {
+        assignedTasks: totalAssignedTasks,
+        tasksDueToday: tasksDueTodayCount,
+        overdueTasks: overdueTasksCount,
+        projectsAssignedToMe: projectsAssignedToMeCount,
+        pendingTaskRequests: pendingTaskRequestsCount,
+        approvedRequests: approvedRequestsCount,
+        rejectedRequests: rejectedRequestsCount,
+      },
+      myProjects: myProjectsWithCompletion,
+      myTasks: myTasksList.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+        priority: t.priority,
+        projectName: t.projectName,
+      })),
+      upcomingDeadlines: upcomingDeadlines.slice(0, 10),
+      myTaskRequests: myTaskRequestsList.map((t) => ({
+        id: t.id,
+        title: t.title,
+        approvalStatus: t.approvalStatus,
+        rejectionReason: t.rejectionReason,
+        createdAt: t.createdAt ? t.createdAt.toISOString() : null,
+        projectName: t.projectName,
+      })),
+      recentActivity: activities.slice(0, 10),
+      clientInfo: {
+        count: myClients.length,
+        names: myClients.map((c) => c.companyName),
+      },
+    });
+  }
+
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const monthStart = `${year}-${month}-01`;
@@ -441,6 +767,16 @@ router.get("/stats", requirePermission("reports.view"), asyncHandler(async (req,
 }));
 
 router.get("/revenue-chart", requirePermission("reports.view"), asyncHandler(async (req, res) => {
+  const userId = (req as any).userId;
+  const [user] = await db
+    .select({ systemRole: usersTable.systemRole })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (user?.systemRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Forbidden: Employees cannot access financial charts." });
+  }
+
   const now = new Date();
   const range = (req.query.range as string) ?? "6m";
 
@@ -484,6 +820,96 @@ router.get("/revenue-chart", requirePermission("reports.view"), asyncHandler(asy
 }));
 
 router.get("/project-health", asyncHandler(async (req, res) => {
+  const userId = (req as any).userId;
+  const [user] = await db
+    .select({ systemRole: usersTable.systemRole })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (user?.systemRole !== "SUPER_ADMIN") {
+    const employeeTasks = await db
+      .select({ projectId: tasksTable.projectId })
+      .from(tasksTable)
+      .where(eq(tasksTable.assigneeId, userId));
+
+    const assignedProjectIds = Array.from(new Set(employeeTasks.map((t) => t.projectId).filter(Boolean))) as string[];
+
+    const projects = await db
+      .select({
+        id: projectsTable.id,
+        status: projectsTable.status,
+        dueDate: projectsTable.dueDate,
+        createdBy: projectsTable.createdBy,
+      })
+      .from(projectsTable);
+
+    const myProjects = projects.filter((p) => p.createdBy === userId || assignedProjectIds.includes(p.id));
+    const myProjectIds = myProjects.map((p) => p.id);
+
+    const tasks = await db
+      .select({
+        projectId: tasksTable.projectId,
+        status: tasksTable.status,
+      })
+      .from(tasksTable)
+      .where(sql`${tasksTable.projectId} is not null`);
+
+    const myTasks = tasks.filter((t) => t.projectId && myProjectIds.includes(t.projectId));
+
+    const projectTasksMap: Record<string, { total: number; incomplete: number }> = {};
+    for (const t of myTasks) {
+      if (t.projectId) {
+        if (!projectTasksMap[t.projectId]) {
+          projectTasksMap[t.projectId] = { total: 0, incomplete: 0 };
+        }
+        projectTasksMap[t.projectId].total++;
+        if (t.status !== "COMPLETED") {
+          projectTasksMap[t.projectId].incomplete++;
+        }
+      }
+    }
+
+    let onTrack = 0;
+    let atRisk = 0;
+    let delayed = 0;
+    let completed = 0;
+
+    const now = new Date();
+
+    for (const p of myProjects) {
+      const status = p.status ?? "";
+      if (status === "COMPLETED") {
+        completed++;
+        continue;
+      }
+      if (status === "CANCELLED" || status === "ON_HOLD") {
+        delayed++;
+        continue;
+      }
+
+      const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+      const taskInfo = projectTasksMap[p.id] || { total: 0, incomplete: 0 };
+      const hasIncompleteTasks = taskInfo.incomplete > 0;
+
+      if (dueDate) {
+        const diffTime = dueDate.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays < 0) {
+          atRisk++;
+        } else if (diffDays <= 7 && hasIncompleteTasks) {
+          atRisk++;
+        } else {
+          onTrack++;
+        }
+      } else {
+        onTrack++;
+      }
+    }
+
+    return res.json({ onTrack, atRisk, delayed, completed, total: myProjects.length });
+  }
+
   const [projects, tasks] = await Promise.all([
     db
       .select({
@@ -559,6 +985,136 @@ router.get("/project-health", asyncHandler(async (req, res) => {
 }));
 
 router.get("/recent-activity", asyncHandler(async (req, res) => {
+  const userId = (req as any).userId;
+  const [user] = await db
+    .select({ systemRole: usersTable.systemRole })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (user?.systemRole !== "SUPER_ADMIN") {
+    // Return employee's own activities!
+    const employeeTasks = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        status: tasksTable.status,
+        projectId: tasksTable.projectId,
+        approvalStatus: tasksTable.approvalStatus,
+        createdAt: tasksTable.createdAt,
+        updatedAt: tasksTable.updatedAt,
+        approvedAt: tasksTable.approvedAt,
+      })
+      .from(tasksTable)
+      .where(eq(tasksTable.assigneeId, userId));
+
+    const employeeTaskRequests = await db
+      .select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        approvalStatus: tasksTable.approvalStatus,
+        createdAt: tasksTable.createdAt,
+        updatedAt: tasksTable.updatedAt,
+        requestedAt: tasksTable.requestedAt,
+        approvedAt: tasksTable.approvedAt,
+      })
+      .from(tasksTable)
+      .where(eq(tasksTable.requestedBy, userId));
+
+    const myLeaves = await db
+      .select()
+      .from(leaveRequestsTable)
+      .where(eq(leaveRequestsTable.userId, userId));
+
+    const allProjects = await db
+      .select({
+        id: projectsTable.id,
+        name: projectsTable.name,
+        createdBy: projectsTable.createdBy,
+        createdAt: projectsTable.createdAt,
+      })
+      .from(projectsTable);
+
+    const assignedProjectIds = Array.from(new Set(employeeTasks.map((t) => t.projectId).filter(Boolean))) as string[];
+    const myProjects = allProjects.filter((p) => p.createdBy === userId || assignedProjectIds.includes(p.id));
+
+    const activities: any[] = [];
+    for (const t of employeeTasks) {
+      const tCreatedAt = t.createdAt ? new Date(t.createdAt) : new Date();
+      const tUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : new Date();
+
+      if (t.approvalStatus === "APPROVED") {
+        const approvedDate = t.approvedAt ? new Date(t.approvedAt) : tCreatedAt;
+        activities.push({
+          id: `task-assigned-${t.id}`,
+          type: "task",
+          message: `Task assigned: "${t.title}"`,
+          createdAt: approvedDate.toISOString(),
+        });
+
+        if (t.status === "IN_PROGRESS" || t.status === "COMPLETED") {
+          activities.push({
+            id: `task-status-${t.id}`,
+            type: "task",
+            message: `Task status updated to ${t.status.replace("_", " ")}: "${t.title}"`,
+            createdAt: tUpdatedAt.toISOString(),
+          });
+        }
+      }
+    }
+
+    for (const tr of employeeTaskRequests) {
+      const trCreatedAt = tr.requestedAt ? new Date(tr.requestedAt) : (tr.createdAt ? new Date(tr.createdAt) : new Date());
+      const trUpdatedAt = tr.updatedAt ? new Date(tr.updatedAt) : new Date();
+
+      activities.push({
+        id: `task-req-submitted-${tr.id}`,
+        type: "task",
+        message: `Submitted task request: "${tr.title}"`,
+        createdAt: trCreatedAt.toISOString(),
+      });
+
+      if (tr.approvalStatus === "APPROVED") {
+        const approvedDate = tr.approvedAt ? new Date(tr.approvedAt) : trUpdatedAt;
+        activities.push({
+          id: `task-req-approved-${tr.id}`,
+          type: "task",
+          message: `Task request approved: "${tr.title}"`,
+          createdAt: approvedDate.toISOString(),
+        });
+      } else if (tr.approvalStatus === "REJECTED") {
+        activities.push({
+          id: `task-req-rejected-${tr.id}`,
+          type: "task",
+          message: `Task request rejected: "${tr.title}"`,
+          createdAt: trUpdatedAt.toISOString(),
+        });
+      }
+    }
+
+    for (const lv of myLeaves) {
+      const lvCreatedAt = lv.createdAt ? new Date(lv.createdAt) : new Date();
+      activities.push({
+        id: `leave-submitted-${lv.id}`,
+        type: "leave",
+        message: `Leave request submitted: ${lv.type} (${lv.startDate} to ${lv.endDate})`,
+        createdAt: lvCreatedAt.toISOString(),
+      });
+    }
+
+    for (const p of myProjects) {
+      const pCreatedAt = p.createdAt ? new Date(p.createdAt) : new Date();
+      activities.push({
+        id: `project-assigned-${p.id}`,
+        type: "project",
+        message: `Project assigned: "${p.name}"`,
+        createdAt: pCreatedAt.toISOString(),
+      });
+    }
+
+    activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return res.json(activities.slice(0, 10));
+  }
+
   const [clients, projects, invoices] = await Promise.all([
     db.select({ id: clientsTable.id, companyName: clientsTable.companyName, createdAt: clientsTable.createdAt }).from(clientsTable).orderBy(sql`created_at desc`).limit(3),
     db.select({ id: projectsTable.id, name: projectsTable.name, createdAt: projectsTable.createdAt }).from(projectsTable).orderBy(sql`created_at desc`).limit(3),

@@ -23,5 +23,25 @@ export interface Task {
   assigneeName?: string | null;
   /** @nullable */
   dueDate?: string | null;
+  /** @nullable */
+  approvalStatus?: string | null;
+  /** @nullable */
+  requestedBy?: string | null;
+  /** @nullable */
+  requestedByName?: string | null;
+  /** @nullable */
+  requestedByEmail?: string | null;
+  /** @nullable */
+  approvedBy?: string | null;
+  /** @nullable */
+  approvedByName?: string | null;
+  /** @nullable */
+  approvedByEmail?: string | null;
+  /** @nullable */
+  approvedAt?: string | null;
+  /** @nullable */
+  rejectionReason?: string | null;
+  /** @nullable */
+  requestedAt?: string | null;
   createdAt: string;
 }

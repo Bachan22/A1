@@ -18,7 +18,7 @@ const pool = new Pool({ connectionString: cleanUrl });
 async function main() {
   const client = await pool.connect();
   try {
-    const res = await client.query("SELECT id, name, email, role, system_role, is_active FROM users");
+    const res = await client.query("SELECT id, name, email, role, system_role, is_active, allowed_modules FROM users");
     console.log("Users in DB:");
     console.log(res.rows);
   } catch (err) {

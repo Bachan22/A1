@@ -15,6 +15,14 @@ export const tasksTable = pgTable("tasks", {
   description: text("description"),
   parentId: text("parent_id").references((): any => tasksTable.id, { onDelete: "cascade" }),
   
+  // Approval workflow fields
+  approvalStatus: text("approval_status"),
+  requestedBy: text("requested_by").references(() => usersTable.id, { onDelete: "set null" }),
+  approvedBy: text("approved_by").references(() => usersTable.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  requestedAt: timestamp("requested_at"),
+  
   // Audit fields
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

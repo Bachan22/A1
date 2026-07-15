@@ -12,6 +12,8 @@ export const attendanceTable = pgTable("attendance", {
   checkOutAt: timestamp("check_out_at"),
   isLate: boolean("is_late").notNull().default(false),
   overtimeMin: integer("overtime_min").notNull().default(0),
+  overtimeCheckInAt: timestamp("overtime_check_in_at"),
+  overtimeCheckOutAt: timestamp("overtime_check_out_at"),
   date: text("date").notNull(),
 });
 

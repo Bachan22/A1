@@ -1659,6 +1659,26 @@ components:
           type: ["string", "null"]
         description:
           type: ["string", "null"]
+        approvalStatus:
+          type: ["string", "null"]
+        requestedBy:
+          type: ["string", "null"]
+        requestedByName:
+          type: ["string", "null"]
+        requestedByEmail:
+          type: ["string", "null"]
+        approvedBy:
+          type: ["string", "null"]
+        approvedByName:
+          type: ["string", "null"]
+        approvedByEmail:
+          type: ["string", "null"]
+        approvedAt:
+          type: ["string", "null"]
+        rejectionReason:
+          type: ["string", "null"]
+        requestedAt:
+          type: ["string", "null"]
 
     TaskInput:
       type: object
@@ -1677,6 +1697,18 @@ components:
         dueDate:
           type: ["string", "null"]
         description:
+          type: ["string", "null"]
+        approvalStatus:
+          type: ["string", "null"]
+        requestedBy:
+          type: ["string", "null"]
+        approvedBy:
+          type: ["string", "null"]
+        approvedAt:
+          type: ["string", "null"]
+        rejectionReason:
+          type: ["string", "null"]
+        requestedAt:
           type: ["string", "null"]
 
     ContentPost:

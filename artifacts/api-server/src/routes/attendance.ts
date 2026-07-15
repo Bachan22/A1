@@ -52,6 +52,8 @@ router.get("/attendance", requirePermission("attendance.view"), asyncHandler(asy
     userName: userMap[r.userId] ?? null,
     checkInAt: r.checkInAt?.toISOString() ?? null,
     checkOutAt: r.checkOutAt?.toISOString() ?? null,
+    overtimeCheckInAt: r.overtimeCheckInAt?.toISOString() ?? null,
+    overtimeCheckOutAt: r.overtimeCheckOutAt?.toISOString() ?? null,
   })));
 }));
 
@@ -126,7 +128,84 @@ router.get("/attendance/today", requirePermission("attendance.manage"), asyncHan
     checkedIn: !!record,
     checkInAt: record?.checkInAt?.toISOString() ?? null,
     checkOutAt: record?.checkOutAt?.toISOString() ?? null,
+    overtimeCheckInAt: record?.overtimeCheckInAt?.toISOString() ?? null,
+    overtimeCheckOutAt: record?.overtimeCheckOutAt?.toISOString() ?? null,
     attendanceId: record?.id ?? null,
+  });
+}));
+
+router.post("/attendance/overtime-check-in", requirePermission("attendance.manage"), asyncHandler(async (req, res) => {
+  const userId = (req as any).userId;
+  const [user] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId));
+  if (!user) throw createError("Unauthorized", 401);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = await db.query.attendance.findFirst({
+    where: and(eq(attendance.userId, userId), eq(attendance.date, today)),
+  });
+
+  if (!existing) {
+    throw createError("You must check in for regular work first", 400);
+  }
+  if (!existing.checkOutAt) {
+    throw createError("You must check out of regular work first before starting overtime", 400);
+  }
+  if (existing.overtimeCheckInAt) {
+    throw createError("Overtime has already been started today", 400);
+  }
+
+  const now = new Date();
+  const [updated] = await db.update(attendance)
+    .set({ overtimeCheckInAt: now })
+    .where(eq(attendance.id, existing.id))
+    .returning();
+
+  return res.json({
+    ...updated,
+    userName: user.name,
+    checkInAt: updated.checkInAt?.toISOString() ?? null,
+    checkOutAt: updated.checkOutAt?.toISOString() ?? null,
+    overtimeCheckInAt: updated.overtimeCheckInAt?.toISOString() ?? null,
+    overtimeCheckOutAt: updated.overtimeCheckOutAt?.toISOString() ?? null,
+  });
+}));
+
+router.post("/attendance/overtime-check-out", requirePermission("attendance.manage"), asyncHandler(async (req, res) => {
+  const userId = (req as any).userId;
+  const [user] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId));
+  if (!user) throw createError("Unauthorized", 401);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = await db.query.attendance.findFirst({
+    where: and(eq(attendance.userId, userId), eq(attendance.date, today)),
+  });
+
+  if (!existing) {
+    throw createError("No attendance record found for today", 400);
+  }
+  if (!existing.overtimeCheckInAt) {
+    throw createError("Overtime has not been started today", 400);
+  }
+  if (existing.overtimeCheckOutAt) {
+    throw createError("Overtime has already been checked out today", 400);
+  }
+
+  const now = new Date();
+  const otStart = new Date(existing.overtimeCheckInAt);
+  const overtimeMin = Math.max(0, Math.floor((now.getTime() - otStart.getTime()) / 60000));
+
+  const [updated] = await db.update(attendance)
+    .set({ overtimeCheckOutAt: now, overtimeMin })
+    .where(eq(attendance.id, existing.id))
+    .returning();
+
+  return res.json({
+    ...updated,
+    userName: user.name,
+    checkInAt: updated.checkInAt?.toISOString() ?? null,
+    checkOutAt: updated.checkOutAt?.toISOString() ?? null,
+    overtimeCheckInAt: updated.overtimeCheckInAt?.toISOString() ?? null,
+    overtimeCheckOutAt: updated.overtimeCheckOutAt?.toISOString() ?? null,
   });
 }));
 
