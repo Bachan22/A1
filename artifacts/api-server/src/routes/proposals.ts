@@ -17,7 +17,7 @@ function sanitizeProposal(body: any, isUpdate = false) {
     textDates: ["validUntil"],
     numbers: ["value"],
     enums: {
-      status: ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "REVOKED"],
+      status: ["DRAFT", "SENT", "APPROVED", "REJECTED", "ACCEPTED", "DECLINED", "REVOKED"],
     }
   });
 }

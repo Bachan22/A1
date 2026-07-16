@@ -122,6 +122,8 @@ export default function ContentPage() {
     activeClientId ? { clientId: activeClientId } : undefined,
   );
 
+  const activePost = panel.mode === "edit" && panel.post ? (posts ?? []).find(p => p.id === panel.post.id) || panel.post : null;
+
   const createMutation = useCreateContentPost({
     mutation: {
       onSuccess: () => {
@@ -175,23 +177,24 @@ export default function ContentPage() {
   }
 
   function openEdit(post: PostRecord) {
+    const freshPost = (posts ?? []).find(p => p.id === post.id) || post;
     setDraft({
-      title: post.title ?? "",
-      platform: post.platform ?? "INSTAGRAM",
-      contentType: post.contentType ?? "POST",
-      status: post.status ?? "IDEA",
-      caption: post.caption ?? "",
-      scheduledAt: post.scheduledAt ?? "",
-      shootDate: post.shootDate ?? "",
-      clientId: post.clientId ?? "",
-      assetsLink: post.assetsLink ?? "",
-      format: post.format ?? "",
-      needsRevision: post.needsRevision === "true",
-      customProperties: post.customProperties ?? [],
-      comments: post.comments ?? [],
+      title: freshPost.title ?? "",
+      platform: freshPost.platform ?? "INSTAGRAM",
+      contentType: freshPost.contentType ?? "POST",
+      status: freshPost.status ?? "IDEA",
+      caption: freshPost.caption ?? "",
+      scheduledAt: freshPost.scheduledAt ?? "",
+      shootDate: freshPost.shootDate ?? "",
+      clientId: freshPost.clientId ?? "",
+      assetsLink: freshPost.assetsLink ?? "",
+      format: freshPost.format ?? "",
+      needsRevision: freshPost.needsRevision === "true",
+      customProperties: freshPost.customProperties ?? [],
+      comments: freshPost.comments ?? [],
     });
     setNewComment("");
-    setPanel({ mode: "edit", post });
+    setPanel({ mode: "edit", post: freshPost });
   }
 
   function setField<K extends keyof typeof draft>(key: K, value: typeof draft[K]) {
@@ -216,8 +219,8 @@ export default function ContentPage() {
     };
     if (panel.mode === "create") {
       createMutation.mutate({ data: payload as any });
-    } else if (panel.mode === "edit") {
-      updateMutation.mutate({ id: panel.post.id, data: payload as any });
+    } else if (panel.mode === "edit" && activePost) {
+      updateMutation.mutate({ id: activePost.id, data: payload as any });
     }
   }
 
@@ -546,7 +549,7 @@ export default function ContentPage() {
               {panel.mode === "edit" && (
                 <Button
                   size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => { if (panel.mode === "edit") deleteMutation.mutate({ id: panel.post.id }); }}
+                  onClick={() => { if (panel.mode === "edit" && activePost) deleteMutation.mutate({ id: activePost.id }); }}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -670,11 +673,11 @@ export default function ContentPage() {
             </div>
 
             {/* Created (read-only, edit only) */}
-            {panel.mode === "edit" && panel.post.createdAt && (
+            {panel.mode === "edit" && activePost && activePost.createdAt && (
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Created</Label>
                 <p className="text-sm text-muted-foreground">
-                  {format(new Date(panel.post.createdAt), "dd MMM yyyy, hh:mm a")}
+                  {format(new Date(activePost.createdAt), "dd MMM yyyy, hh:mm a")}
                 </p>
               </div>
             )}

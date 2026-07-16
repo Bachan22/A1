@@ -183,13 +183,14 @@ export default function UsersPage() {
 
   const openEdit = (u: any) => {
     setFailedEmail(null);
-    setEditId(u.id);
+    const freshU = (users ?? []).find((userObj: any) => userObj.id === u.id) || u;
+    setEditId(freshU.id);
     reset({
-      name: u.name,
-      email: u.email,
-      systemRole: u.systemRole ?? "ACCOUNT_MANAGER",
-      department: u.department ?? "",
-      allowedModules: u.allowedModules ?? []
+      name: freshU.name,
+      email: freshU.email,
+      systemRole: freshU.systemRole ?? "ACCOUNT_MANAGER",
+      department: freshU.department ?? "",
+      allowedModules: freshU.allowedModules ?? []
     });
     setDialogOpen(true);
   };

@@ -4,12 +4,14 @@ import { logger } from "../lib/logger";
 export interface AppError extends Error {
   statusCode?: number;
   code?: string;
+  field?: string;
 }
 
-export function createError(message: string, statusCode = 400, code?: string): AppError {
+export function createError(message: string, statusCode = 400, code?: string, field?: string): AppError {
   const err: AppError = new Error(message);
   err.statusCode = statusCode;
   if (code) err.code = code;
+  if (field) err.field = field;
   return err;
 }
 
@@ -30,5 +32,6 @@ export function errorHandler(
   res.status(status).json({
     error: err.message || "Internal server error",
     ...(err.code ? { code: err.code } : {}),
+    ...(err.field ? { field: err.field, message: err.message } : {}),
   });
 }

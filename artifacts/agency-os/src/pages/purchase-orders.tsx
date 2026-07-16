@@ -57,13 +57,15 @@ function calcTotals(items: LineItem[]) {
 export default function PurchaseOrdersPage() {
   const qc = useQueryClient();
   const [view, setView] = useState<"list" | "form" | "detail">("list");
-  const [selected, setSelected] = useState<PurchaseOrder | null>(null);
+  const [selectedState, setSelected] = useState<PurchaseOrder | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const { data: orders, isLoading } = useListPurchaseOrders();
   const { data: clients } = useListClients({});
+
+  const selected = selectedState ? (orders ?? []).find(o => o.id === selectedState.id) as PurchaseOrder || selectedState : null;
 
   const createMutation = useCreatePurchaseOrder({
     mutation: {

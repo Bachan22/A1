@@ -100,8 +100,9 @@ export default function ProposalsPage() {
   };
 
   const openEdit = (p: NonNullable<typeof proposals>[number]) => {
-    setEditId(p.id);
-    reset({ title: p.title ?? "", clientId: p.clientId ?? "", status: p.status ?? "DRAFT", template: p.template ?? "social", notes: p.notes ?? "" });
+    const freshP = (proposals ?? []).find(proj => proj.id === p.id) || p;
+    setEditId(freshP.id);
+    reset({ title: freshP.title ?? "", clientId: freshP.clientId ?? "", status: freshP.status ?? "DRAFT", template: freshP.template ?? "social", notes: freshP.notes ?? "" });
     setDialogOpen(true);
   };
 

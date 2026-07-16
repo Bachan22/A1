@@ -9,11 +9,16 @@ import { requirePermission } from "../middleware/auth";
 
 function sanitizeClient(body: any, isUpdate = false) {
   if (!isUpdate && (!body.companyName || typeof body.companyName !== "string" || body.companyName.trim() === "")) {
-    throw createError("Company name is required", 400);
+    throw createError("Company name is required", 400, undefined, "companyName");
+  }
+  if (isUpdate && body.companyName !== undefined) {
+    if (typeof body.companyName !== "string" || body.companyName.trim() === "") {
+      throw createError("Company name cannot be empty", 400, undefined, "companyName");
+    }
   }
   return sanitizeAndValidate(body, {
     enums: {
-      category: ["RETAINER", "ONE_TIME", "PARTNER", "LEAD", "INACTIVE"],
+      category: ["RETAINER", "ONE_TIME", "PARTNER", "LEAD", "INACTIVE", "CHURNED"],
       health: ["GREEN", "YELLOW", "RED"],
     }
   });

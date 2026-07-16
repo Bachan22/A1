@@ -40,7 +40,7 @@ export function sanitizeAndValidate(body: any, config: ValidationConfig = {}): a
       const val = result[key];
       if (val !== undefined && val !== null) {
         if (!UUID_REGEX.test(String(val))) {
-          throw createError(`Invalid UUID format for field: ${key}`, 400);
+          throw createError(`Invalid UUID format for field: ${key}`, 400, undefined, key);
         }
       }
     }
@@ -53,7 +53,7 @@ export function sanitizeAndValidate(body: any, config: ValidationConfig = {}): a
       if (val !== undefined && val !== null) {
         const d = new Date(val);
         if (isNaN(d.getTime())) {
-          throw createError(`Invalid timestamp/date syntax for field: ${key}`, 400);
+          throw createError(`Invalid timestamp/date syntax for field: ${key}`, 400, undefined, key);
         }
         result[key] = d;
       }
@@ -67,7 +67,7 @@ export function sanitizeAndValidate(body: any, config: ValidationConfig = {}): a
       if (val !== undefined && val !== null) {
         const d = new Date(val);
         if (isNaN(d.getTime())) {
-          throw createError(`Invalid date syntax for field: ${key}`, 400);
+          throw createError(`Invalid date syntax for field: ${key}`, 400, undefined, key);
         }
         // Save as date ISO string or the validated input string
         result[key] = String(val);
@@ -82,22 +82,32 @@ export function sanitizeAndValidate(body: any, config: ValidationConfig = {}): a
       if (val !== undefined && val !== null) {
         const n = Number(val);
         if (isNaN(n) || !Number.isFinite(n)) {
-          throw createError(`Invalid numeric value for field: ${key}`, 400);
+          throw createError(`Invalid numeric value for field: ${key}`, 400, undefined, key);
         }
         result[key] = n;
       }
     }
   }
 
-  // 6. Validate enum fields against allowed options
+  // 6. Validate enum fields against allowed options (with normalization support)
   if (config.enums) {
     for (const [key, allowedValues] of Object.entries(config.enums)) {
       const val = result[key];
       if (val !== undefined && val !== null) {
-        if (!allowedValues.includes(String(val))) {
+        const valStr = String(val);
+        const normalizedVal = valStr.trim().toUpperCase().replace(/[\s-]+/g, "_");
+        
+        // Match either the direct value or normalized value
+        if (allowedValues.includes(valStr)) {
+          result[key] = valStr;
+        } else if (allowedValues.includes(normalizedVal)) {
+          result[key] = normalizedVal;
+        } else {
           throw createError(
-            `Invalid value for '${key}'. Allowed values are: ${allowedValues.join(", ")}`,
-            400
+            `Invalid value '${valStr}' for '${key}'. Allowed values are: ${allowedValues.join(", ")}`,
+            400,
+            undefined,
+            key
           );
         }
       }

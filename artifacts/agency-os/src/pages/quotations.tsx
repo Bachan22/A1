@@ -683,10 +683,12 @@ function QuotationEditor({
 export default function QuotationsPage() {
   const qc = useQueryClient();
   const [view, setView] = useState<"list" | "editor">("list");
-  const [editingRow, setEditingRow] = useState<QuotationRow | undefined>(undefined);
+  const [editingRowState, setEditingRow] = useState<QuotationRow | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const { data: quotations, isLoading } = useListQuotations();
+
+  const editingRow = editingRowState ? (quotations ?? []).find(q => q.id === editingRowState.id) as any || editingRowState : undefined;
 
   const deleteMutation = useDeleteQuotation({
     mutation: {

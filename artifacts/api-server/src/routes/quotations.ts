@@ -17,7 +17,7 @@ function sanitizeQuotation(body: any, isUpdate = false) {
     textDates: ["quotationDate", "validUntil", "dueDate"],
     numbers: ["subtotal", "taxAmount", "discount", "total"],
     enums: {
-      status: ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "APPROVED", "REJECTED"],
+      status: ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "APPROVED", "REJECTED", "EXPIRED"],
       discountType: ["FIXED", "PERCENT", "AMOUNT"],
     }
   });

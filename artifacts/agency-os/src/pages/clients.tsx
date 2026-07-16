@@ -45,13 +45,15 @@ export default function ClientsPage() {
   const [category, setCategory] = useState("ALL");
   const [health, setHealth] = useState("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editClient, setEditClient] = useState<{ id: string } & ClientInput | null>(null);
+  const [editClientState, setEditClient] = useState<{ id: string } & ClientInput | null>(null);
   const [serviceType, setServiceType] = useState("SOCIAL_MEDIA");
 
   const { data: clients, isLoading } = useListClients({
     search: search || undefined,
     category: category !== "ALL" ? category : undefined,
   });
+
+  const editClient = editClientState ? (clients ?? []).find((c) => c.id === editClientState.id) as any || editClientState : null;
 
   const createMutation = useCreateClient({
     mutation: {

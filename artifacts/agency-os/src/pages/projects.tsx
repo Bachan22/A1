@@ -24,6 +24,7 @@ import { Plus, FolderKanban, Trash2, Pencil, Calendar, PlayCircle, CheckCircle2,
 import { SearchBar } from "@/components/common/SearchBar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   NOT_STARTED: { label: "Not Started", className: "bg-slate-100 text-slate-700 border-slate-200" },
@@ -95,24 +96,26 @@ export default function ProjectsPage() {
   });
 
   const { register, handleSubmit, control, reset } = useForm<ProjectFormData>({
-    defaultValues: { name: "", status: "NOT_STARTED", priority: "MEDIUM" },
+    defaultValues: { name: "", description: "", status: "NOT_STARTED", priority: "MEDIUM" },
   });
 
   const openAdd = () => {
-    reset({ name: "", status: "NOT_STARTED", priority: "MEDIUM" });
+    reset({ name: "", description: "", status: "NOT_STARTED", priority: "MEDIUM" });
     setEditId(null);
     setDialogOpen(true);
   };
 
   const openEdit = (p: NonNullable<typeof projects>[number]) => {
-    setEditId(p.id);
+    const freshP = (projects ?? []).find(proj => proj.id === p.id) || p;
+    setEditId(freshP.id);
     reset({
-      name: p.name,
-      status: p.status ?? "NOT_STARTED",
-      priority: p.priority ?? "MEDIUM",
-      clientId: p.clientId ?? undefined,
-      startDate: p.startDate ? p.startDate.split("T")[0] : undefined,
-      dueDate: p.dueDate ? p.dueDate.split("T")[0] : undefined,
+      name: freshP.name,
+      description: freshP.description ?? "",
+      status: freshP.status ?? "NOT_STARTED",
+      priority: freshP.priority ?? "MEDIUM",
+      clientId: freshP.clientId ?? undefined,
+      startDate: freshP.startDate ? freshP.startDate.split("T")[0] : undefined,
+      dueDate: freshP.dueDate ? freshP.dueDate.split("T")[0] : undefined,
     });
     setDialogOpen(true);
   };
@@ -242,9 +245,18 @@ export default function ProjectsPage() {
                       )}
                     </div>
                     <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(p)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(p)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="z-50 bg-slate-900 border border-slate-800 text-slate-100 dark:bg-slate-950 dark:border-slate-850 p-3 max-w-sm whitespace-pre-wrap rounded-lg shadow-xl leading-relaxed text-xs font-normal">
+                            {p.description && p.description.trim() ? p.description : "No description available."}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteMutation.mutate({ id: p.id })}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

@@ -14,9 +14,9 @@ function sanitizeContentPost(body: any, isUpdate = false) {
     uuids: ["clientId"],
     textDates: ["scheduledAt", "shootDate"],
     enums: {
-      platform: ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE", "PINTEREST"],
+      platform: ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE", "PINTEREST", "TWITTER"],
       contentType: ["POST", "REEL", "STORY", "CAROUSEL", "VIDEO", "SHORTS"],
-      status: ["IDEA", "SCRIPTING", "PRODUCTION", "SCHEDULING", "POSTED"],
+      status: ["IDEA", "SCRIPTING", "DESIGNING", "PRODUCTION", "IN_REVIEW", "ADMIN_APPROVED", "SCHEDULED", "PUBLISHED", "SCHEDULING", "POSTED"],
       approvalStatus: ["PENDING", "APPROVED", "REJECTED"],
     }
   });

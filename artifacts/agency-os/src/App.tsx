@@ -1,5 +1,5 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { useEffect, useState, createContext, useContext, Component, ErrorInfo, ReactNode } from "react";
 import type { User } from "@workspace/api-client-react";
@@ -156,14 +156,190 @@ setAuthTokenGetter(() => {
   return activeToken || (typeof window !== "undefined" ? (localStorage.getItem("agency_token") || localStorage.getItem("token")) : null) || "";
 });
 
+// ─── Entity Dependency Cache Synchronizer ──────────────────────────
+const MUTATION_TO_ENTITY: Record<string, string> = {
+  createClient: "clients",
+  updateClient: "clients",
+  deleteClient: "clients",
+
+  createProject: "projects",
+  updateProject: "projects",
+  deleteProject: "projects",
+
+  createTask: "tasks",
+  updateTask: "tasks",
+  deleteTask: "tasks",
+
+  createLead: "leads",
+  updateLead: "leads",
+  deleteLead: "leads",
+
+  createContentPost: "contentPosts",
+  updateContentPost: "contentPosts",
+  deleteContentPost: "contentPosts",
+  createCalendarShare: "calendarShares",
+
+  createInvoice: "invoices",
+  updateInvoice: "invoices",
+  deleteInvoice: "invoices",
+
+  createQuotation: "quotations",
+  updateQuotation: "quotations",
+  deleteQuotation: "quotations",
+  convertQuotationToInvoice: "invoices",
+
+  createProposal: "proposals",
+  updateProposal: "proposals",
+  deleteProposal: "proposals",
+
+  createUser: "users",
+  updateUser: "users",
+  deleteUser: "users",
+
+  checkIn: "attendance",
+  checkOut: "attendance",
+
+  createLeaveRequest: "leaves",
+  approveLeaveRequest: "leaves",
+  rejectLeaveRequest: "leaves",
+
+  updateSettings: "settings",
+
+  createProformaInvoice: "proformaInvoices",
+  updateProformaInvoice: "proformaInvoices",
+  deleteProformaInvoice: "proformaInvoices",
+
+  createPurchaseOrder: "purchaseOrders",
+  updatePurchaseOrder: "purchaseOrders",
+  deletePurchaseOrder: "purchaseOrders",
+
+  createDeliveryChallan: "deliveryChallans",
+  updateDeliveryChallan: "deliveryChallans",
+  deleteDeliveryChallan: "deliveryChallans",
+};
+
+const ENTITY_QUERIES: Record<string, string[]> = {
+  projects: ["/api/projects", "/api/tasks"],
+  clients: [
+    "/api/clients",
+    "/api/projects",
+    "/api/invoices",
+    "/api/quotations",
+    "/api/proposals",
+    "/api/purchase-orders",
+    "/api/leads",
+    "/api/content-posts"
+  ],
+  tasks: ["/api/tasks"],
+  leads: ["/api/leads"],
+  contentPosts: ["/api/content-posts"],
+  calendarShares: ["/api/content-posts/shares"],
+  invoices: ["/api/invoices"],
+  quotations: ["/api/quotations"],
+  proposals: ["/api/proposals"],
+  users: [
+    "/api/users",
+    "/api/tasks",
+    "/api/attendance",
+    "/api/leave-requests",
+    "/api/projects"
+  ],
+  attendance: ["/api/attendance", "/api/attendance/today"],
+  leaves: ["/api/leave-requests", "/api/attendance"],
+  settings: ["/api/settings"],
+  proformaInvoices: ["/api/proforma-invoices"],
+  purchaseOrders: ["/api/purchase-orders"],
+  deliveryChallans: ["/api/delivery-challans"]
+};
+
+function resolveDependencies(mutationKey: string, variables: any): Set<string> {
+  const prefixes = new Set<string>();
+  const entity = MUTATION_TO_ENTITY[mutationKey];
+
+  if (entity && ENTITY_QUERIES[entity]) {
+    ENTITY_QUERIES[entity].forEach(prefix => prefixes.add(prefix));
+  }
+
+  if (mutationKey === "convertQuotationToInvoice") {
+    ENTITY_QUERIES.quotations?.forEach(prefix => prefixes.add(prefix));
+  }
+
+  // Check if we should invalidate Recent Activity
+  const isCreate = mutationKey.startsWith("create") || mutationKey === "checkIn" || mutationKey === "checkOut";
+  const isDelete = mutationKey.startsWith("delete");
+  const isAction = [
+    "approveLeaveRequest",
+    "rejectLeaveRequest",
+    "convertQuotationToInvoice"
+  ].includes(mutationKey);
+
+  let statusChanged = false;
+  if (variables && typeof variables === 'object') {
+    const payload = variables.data || variables;
+    if (payload && typeof payload === 'object' && ('status' in payload || 'completed' in payload || 'paid' in payload || 'approved' in payload)) {
+      statusChanged = true;
+    }
+  }
+
+  if (isCreate || isDelete || isAction || (mutationKey.startsWith("update") && statusChanged)) {
+    prefixes.add("/api/recent-activity");
+  }
+
+  // Check if we should invalidate Dashboard Stats / Revenue Chart
+  let affectsDashboard = false;
+  if (isCreate || isDelete || isAction) {
+    affectsDashboard = true;
+  } else if (mutationKey.startsWith("update") && variables && typeof variables === 'object') {
+    const payload = variables.data || variables;
+    if (payload && typeof payload === 'object') {
+      const dashboardKeys = ["status", "total", "amount", "paid", "priority", "completed", "approved", "checkIn", "checkOut"];
+      affectsDashboard = dashboardKeys.some(k => k in payload);
+    }
+  }
+
+  if (affectsDashboard) {
+    prefixes.add("/api/dashboard/stats");
+    prefixes.add("/api/dashboard/revenue-chart");
+  }
+
+  return prefixes;
+}
+
 // ─── Query Client ───────────────────────────────────────────────
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 30_000,
+      staleTime: 0,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
     },
   },
+  mutationCache: new MutationCache({
+    onSuccess: (data, variables, context, mutation) => {
+      const mutationKey = mutation.options.mutationKey?.[0] as string | undefined;
+      if (!mutationKey) {
+        queryClient.invalidateQueries();
+        return;
+      }
+
+      const prefixes = resolveDependencies(mutationKey, variables);
+      if (prefixes.size > 0) {
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey[0];
+            if (typeof key === 'string') {
+              return Array.from(prefixes).some(prefix => key === prefix || key.startsWith(prefix + '/'));
+            }
+            return false;
+          }
+        });
+      } else {
+        queryClient.invalidateQueries();
+      }
+    },
+  }),
 });
 
 // ─── Page imports (lazy) ────────────────────────────────────────

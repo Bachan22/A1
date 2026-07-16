@@ -88,7 +88,7 @@ function AdminTasksView() {
   const [viewTab, setViewTab] = useState<"board" | "pending" | "requests">("board");
 
   // Dialog/modal states for administrative actions
-  const [selectedTaskForAction, setSelectedTaskForAction] = useState<any | null>(null);
+  const [selectedTaskForActionState, setSelectedTaskForAction] = useState<any | null>(null);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectionReasonText, setRejectionReasonText] = useState("");
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
@@ -131,6 +131,7 @@ function AdminTasksView() {
   };
 
   const { data: tasks, isLoading } = useListTasks();
+  const selectedTaskForAction = selectedTaskForActionState ? (tasks ?? []).find((t: any) => t.id === selectedTaskForActionState.id) || selectedTaskForActionState : null;
   const { data: projects } = useListProjects();
   const { data: users } = useListUsers();
 
@@ -1012,7 +1013,7 @@ function EmployeeTasksView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [employeeEditDialogOpen, setEmployeeEditDialogOpen] = useState(false);
-  const [selectedTaskForAction, setSelectedTaskForAction] = useState<any | null>(null);
+  const [selectedTaskForActionState, setSelectedTaskForAction] = useState<any | null>(null);
   const [employeeApprovedEditDialogOpen, setEmployeeApprovedEditDialogOpen] = useState(false);
 
   const handleOpenEmployeeApprovedEditDialog = (task: any) => {
@@ -1042,6 +1043,7 @@ function EmployeeTasksView() {
   };
 
   const { data: tasks, isLoading } = useListTasks();
+  const selectedTaskForAction = selectedTaskForActionState ? (tasks ?? []).find((t: any) => t.id === selectedTaskForActionState.id) || selectedTaskForActionState : null;
   const { data: projects } = useListProjects();
 
   const createRequestMutation = useCreateTask({

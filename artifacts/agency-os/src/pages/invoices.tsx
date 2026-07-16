@@ -671,11 +671,13 @@ function InvoiceBuilder({ onBack, editData }: { onBack: () => void; editData?: R
 export default function InvoicesPage() {
   const qc = useQueryClient();
   const [builderOpen, setBuilderOpen] = useState(false);
-  const [editInvoice, setEditInvoice] = useState<Record<string, unknown> | null>(null);
+  const [editInvoiceState, setEditInvoice] = useState<Record<string, unknown> | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const { data: invoices, isLoading } = useListInvoices();
   const { data: summary, isLoading: summaryLoading } = useGetFinancialSummary();
+
+  const editInvoice = editInvoiceState ? (invoices ?? []).find(inv => inv.id === editInvoiceState.id) as any || editInvoiceState : null;
 
   const updateStatus = async (id: string, status: string) => {
     try {

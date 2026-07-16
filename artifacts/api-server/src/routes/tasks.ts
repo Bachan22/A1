@@ -22,14 +22,19 @@ export const TaskApprovalStatus = {
 
 function sanitizeTask(body: any, isUpdate = false) {
   if (!isUpdate && (!body.title || typeof body.title !== "string" || body.title.trim() === "")) {
-    throw createError("Task title is required", 400);
+    throw createError("Task title is required", 400, undefined, "title");
+  }
+  if (isUpdate && body.title !== undefined) {
+    if (typeof body.title !== "string" || body.title.trim() === "") {
+      throw createError("Task title cannot be empty", 400, undefined, "title");
+    }
   }
   return sanitizeAndValidate(body, {
     uuids: ["projectId", "assigneeId", "parentId", "requestedBy", "approvedBy"],
     dates: ["dueDate", "approvedAt", "requestedAt"],
     enums: {
-      status: ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"],
-      priority: ["LOW", "MEDIUM", "HIGH"],
+      status: ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED", "COMPLETED"],
+      priority: ["LOW", "MEDIUM", "HIGH", "URGENT"],
       approvalStatus: ["PENDING", "APPROVED", "REJECTED", "MODIFIED"],
     },
   });
